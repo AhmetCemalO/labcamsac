@@ -4,6 +4,13 @@
 
 It's currently under work.
 
+Changes will include:
+
+* different repository structure
+* switch to Python 3
+* manufacturer interfaces are used as intended by the manufacturers
+* inclusion of manufacturer's dlls/interface files in archive folder
+* slight overhaul and some bugfixes
 
 ------
 
