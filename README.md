@@ -1,6 +1,6 @@
 
 
-# This repository is lab's version of Joao Couto's labcams repository (available at https://bitbucket.org/jpcouto/labcams)
+# This repository is the lab's version of Joao Couto's labcams repository (available at https://bitbucket.org/jpcouto/labcams)
 
 It's currently under work.
 
