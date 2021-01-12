@@ -688,6 +688,10 @@ def main():
                    software_trigger = not opts.wait,
                    triggered = opts.triggered)
     sys.exit(app.exec_())
-    
+
+
+
 if __name__ == '__main__':
+    import multiprocessing
+    multiprocessing.set_start_method('spawn')
     main()

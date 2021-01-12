@@ -1,9 +1,13 @@
-from .cams import *
-# QImaging cameras
+"""qimaging.py
+QImaging cameras
+"""
+
+from .generic_cam import GenericCam
 from .qimaging_dll import *
+from .utils import display
 
 class QImagingCam(GenericCam):
-    def __init__(self, camId = None,
+    def __init__(self, cam_id = None,
                  outQ = None,
                  exposure = 100000,
                  gain = 3500,frameTimeout = 100,
@@ -16,33 +20,25 @@ class QImagingCam(GenericCam):
         Qimaging camera (tested with the Emc2 only!)
             triggerType (0=freerun,1=hardware,5=software)
         '''
-        super(QImagingCam,self).__init__()
-        if camId is None:
-            display('Need to supply a camera ID.')
-            raise
-        self.queue = outQ
+        frame_rate = 1./(self.exposure/1000.)
+        super().__init__(name = 'Qcam', cam_id = cam_id, outQ = outQ,
+                         params = {'binning': binning, 'exposure': exposure,
+                                   'gain': gain, 'frame_rate': frame_rate},
+                         format = {})
+
         self.triggered = triggered
-        self.triggerType = 0
-        self.cam_id = camId
-        self.estimated_readout_lag = 1257 # microseconds
-        self.binning = binning
-        self.exposure = exposure
-        self.gain = gain
-        self.frame_rate = 1./(self.exposure/1000.)
-        self.frameTimeout = frameTimeout
-        self.nbuffers = nFrameBuffers
-        self.triggerType = triggerType
+        
+        self.params['estimated_readout_lag'] = 1257 # microseconds
+        self.params['frameTimeout'] = frameTimeout
+        self.params['triggerType'] = triggerType
+        
         ReleaseDriver()
         LoadDriver()
-        cam = OpenCamera(ListCameras()[camId])
-        cam.settings.readoutSpeed=0 # 0=20MHz, 1=10MHz, 7=40MHz
-        cam.settings.imageFormat = 'mono16'
-        cam.settings.binning = self.binning
-        cam.settings.emGain = gain
-        cam.settings.triggerType = 0
-        cam.settings.exposure = self.exposure - self.estimated_readout_lag
-        cam.settings.blackoutMode=True
-        cam.settings.Flush()
+        
+        cam = OpenCamera(ListCameras()[cam_id])
+        
+        self.set_cam_settings(cam)
+        
         cam.StartStreaming()
         frame = cam.GrabFrame()
         self.dtype = np.uint16
@@ -53,11 +49,29 @@ class QImagingCam(GenericCam):
         self.w = buf.shape[0]
         self._init_variables(dtype = self.dtype)
         cam.StopStreaming()
+        
         cam.CloseCamera()
         ReleaseDriver()
-        display("Got info from camera (name: {0})".format(camId))
-        self.camera_ready = Event()
-
+        
+        display("Got info from camera (name: {0})".format(cam_id))
+    
+    def set_cam_settings(self, cam, triggerType = 0):
+        cam.settings.readoutSpeed=0 # 0=20MHz, 1=10MHz, 7=40MHz
+        cam.settings.imageFormat = 'mono16'
+        cam.settings.binning = self.binning
+        cam.settings.emGain = self.gain
+        cam.settings.triggerType = triggerType
+        cam.settings.exposure = self.exposure - self.estimated_readout_lag
+        cam.settings.blackoutMode=True
+        cam.settings.Flush()
+    
+    def wait_for_start_trigger(self):
+        while not self.start_trigger.is_set():
+            # limits resolution to 1 ms 
+            time.sleep(0.001)
+            if self.close_event.is_set():
+                return
+        
     def run(self):
         #buf = np.frombuffer(self.frame.get_obj(),
         #                    dtype = self.dtype).reshape([
@@ -72,35 +86,15 @@ class QImagingCam(GenericCam):
                 cam = OpenCamera(ListCameras()[self.cam_id])
                 if cam.settings.coolerActive:
                     display('QImaging - cooler active.')
-                cam.settings.readoutSpeed=0 # 0=20MHz, 1=10MHz, 7=40MHz
-                cam.settings.imageFormat = 'mono16'
-                cam.settings.binning = self.binning
-                cam.settings.emGain = self.gain
-                cam.settings.exposure = self.exposure - self.estimated_readout_lag
-                if self.triggered.is_set():
-                    triggerType = self.triggerType
-                else:
-                    triggerType = 0
-                cam.settings.triggerType = triggerType
-                cam.settings.blackoutMode=True
-                cam.settings.Flush()
-                queue = CameraQueue(cam)
+                triggerType = self.triggerType if self.triggered.is_set() else 0
+                self.set_cam_settings(cam, triggerType = self.triggerType)
+                
                 display('QImaging - Camera ready!')
                 self.camera_ready.set()
                 self.nframes.value = 0
-                # Wait for trigger
-            while not self.start_trigger.is_set():
-                # limits resolution to 1 ms 
-                time.sleep(0.001)
-                if self.close_event.is_set():
-                    break
-            if self.close_event.is_set():
-                queue.stop()
-                del queue
-                del cam
-                break
+            self.wait_for_start_trigger()
+            queue = CameraQueue(cam)
             queue.start()
-            #tstart = time.time()
             display('QImaging - Started acquisition.')
             self.camera_ready.clear()
             while not self.stop_trigger.is_set():
@@ -114,9 +108,6 @@ class QImagingCam(GenericCam):
                                    dtype = self.dtype,
                                    shape = (self.w,
                                             self.h)).copy()
-                    
-                #display("Time {0} - {1}:".format(str(1./(time.time()-tstart)),self.nframes.value))
-                #tstart = time.time()
                 timestamp = f.timeStamp
                 frameID = f.frameNumber
                 if self.saving.is_set():
@@ -129,12 +120,11 @@ class QImagingCam(GenericCam):
                 self.img[:] = np.reshape(frame,self.img.shape)[:]
 
                 queue.put(f)
-
             queue.stop()
-            del queue
             cam.settings.blackoutMode=False
             cam.settings.Flush()
-            del cam
+            cam.Abort()
+            cam.CloseCamera()
             self.saving.clear()
             self.start_trigger.clear()
             self.stop_trigger.clear()

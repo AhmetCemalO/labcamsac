@@ -1,0 +1,16 @@
+README.rst
+setup.py
+pco/PCO_File.dll
+pco/PCO_Recorder.dll
+pco/SC2_Cam.dll
+pco/__init__.py
+pco/camera.py
+pco/recorder.py
+pco/sc2_cl_me4.dll
+pco/sc2_clhs.dll
+pco/sdk.py
+pco.egg-info/PKG-INFO
+pco.egg-info/SOURCES.txt
+pco.egg-info/dependency_links.txt
+pco.egg-info/requires.txt
+pco.egg-info/top_level.txt
