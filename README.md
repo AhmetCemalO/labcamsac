@@ -1,3 +1,13 @@
+
+
+# This repository is lab's version of Joao Couto's labcams repository (available at https://bitbucket.org/jpcouto/labcams)
+
+It's currently under work.
+
+
+------
+
+
                                              MMM
                                            MMMMMM
     MMM:               .MMMM             MMMM MMMMMMMM
