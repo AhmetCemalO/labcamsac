@@ -10,31 +10,38 @@ class OpenCVCam(GenericCam):
     def __init__(self,
                  cam_id = None,
                  outQ = None,
-                 frameRate = 0.,
+                 frame_rate = 0.,
                  triggered = Event(),
                  recorderpar = None,
                  **kwargs):
 
-        super().__init__(name = 'OpenCV', cam_id = cam_id, outQ = outQ, recorderpar = recorderpar)
-        self.frame_rate = float(frameRate)
-        self.cam = cv2.VideoCapture(self.cam_id)
-        self.set_framerate(self.frame_rate)
-        ret_val, frame = self.cam.read()
-        self.h = frame.shape[0]
-        self.w = frame.shape[1]
-        if len(frame.shape) > 2:
-            self.nchan = frame.shape[2]
-        self.dtype = frame.dtype
-
-        self._init_variables(dtype = self.dtype)
-
-        self.cam.release()
-        self.cam = None
+        super().__init__(name = 'OpenCV', cam_id = cam_id, outQ = outQ, 
+                         recorderpar = recorderpar, 
+                         params = {'frame_rate': float(frame_rate)})
+        
+        self._init_framebuffer()
+        
         self.triggered = triggered
         if self.triggered.is_set():
             display('[OpenCV {0}] Triggered mode ON.'.format(self.cam_id))
             self.triggerSource = triggerSource
-            
+    
+    def _init_framebuffer(self):
+        self.cam = cv2.VideoCapture(self.cam_id)
+        self.set_cam_settings()
+        ret_val, frame = self.cam.read()
+        if ret_val:
+            self.format['height'] = frame.shape[0]
+            self.format['width'] = frame.shape[1]
+            if len(frame.shape) > 2:
+                self.format['n_chan'] = frame.shape[2]
+            self.format['dtype'] = frame.dtype
+            super()._init_framebuffer()
+        else:
+            display('ERROR: failed to read frame, framebuffer not initialized')
+        self.cam.release()
+        self.cam = None
+    
     def _init_controls(self):
         self.ctrevents = dict(framerate=dict(function = 'set_framerate',
                                              widget = 'float',
@@ -44,7 +51,10 @@ class OpenCVCam(GenericCam):
                                              min = 0.0,
                                              max = 1000,
                                              step = 0.1))
-
+    
+    def set_cam_settings(self):
+        self.set_framerate(self.params['frame_rate'])
+        
     def set_framerate(self,framerate = 30.):
         '''Set frame rate in seconds'''
         self.frame_rate = float(framerate)

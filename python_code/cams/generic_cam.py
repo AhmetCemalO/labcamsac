@@ -11,18 +11,20 @@ class GenericCam(Process):
     """Generic class for interfacing with the cameras
     Has last frame on multiprocessing array
     """
-    def __init__(self, name = '', cam_id = None, outQ = None, recorderpar = None, refreshperiod = 1/20.):
+    def __init__(self, name = '', cam_id = None, outQ = None, recorderpar = None, refreshperiod = 1/20., params = None, format = None):
         
         if cam_id is None:
             display('Need to supply a camera ID.')
             raise
             
         super().__init__()
+        
+        self.params = params if params is not None else {}
+        self.format = format if format is not None else {}
+        
         self.name = name
+        self.cam = None
         self.cam_id = cam_id
-        self.h = None
-        self.w = None
-        self.nchan = 1
         self.close_event = Event()
         self.start_trigger = Event()
         self.stop_trigger = Event()
@@ -43,7 +45,29 @@ class GenericCam(Process):
         self.lasttime = 0
         self.frame = None
         self.img = None
+
+    def _init_framebuffer(self):
+        dtype  = self.format.get('dtype', None)
+        height = self.format.get('height', None)
+        width  = self.format.get('width', None)
+        n_chan = self.format.get('n_chan', 1)
         
+        if (dtype is None) || (height is None) ||(width is None):
+            display(f"ERROR: format (height, width, dtype[,n_chan]) needs to be set to init the framebuffer")
+            return
+
+        if dtype == np.uint8:
+            cdtype = ctypes.c_ubyte
+        elif dtype == np.uint16:
+            cdtype = ctypes.c_ushort
+        else:
+            display(f"WARNING: dtype {dtype} not available, defaulting to np.uint16")
+            cdtype = ctypes.c_ushort
+
+        self.frame = Array(cdtype,np.zeros([height, width,self.nchan],
+                                           dtype = dtype).flatten())
+        self.img = np.frombuffer(self.frame.get_obj(),
+                                 dtype = cdtype).reshape([height, width, n_chan])
     def get_img(self):
         return self.img
 
@@ -59,17 +83,6 @@ class GenericCam(Process):
         if hasattr(self,'ctrevents'):
             for c in self.ctrevents:
                 self.ctrevents[c]['call'] = 'self.' + self.ctrevents[c]['function']
-
-    def _init_variables(self, dtype=np.uint8):
-        if dtype == np.uint8:
-            cdtype = ctypes.c_ubyte
-        else:
-            cdtype = ctypes.c_ushort
-        self.dtype = dtype
-        self.frame = Array(cdtype,np.zeros([self.h,self.w,self.nchan],
-                                           dtype = self.dtype).flatten())
-        self.img = np.frombuffer(self.frame.get_obj(),
-                                 dtype = cdtype).reshape([self.h, self.w, self.nchan])
 
     def _start_recorder(self):
         if not self.recorderpar is None:
@@ -218,7 +231,6 @@ class GenericCam(Process):
             time.sleep(0.001)
             if self.close_event.is_set() or self.stop_trigger.is_set():
                 break
-            self._handle_frame(None,None) # to stop saving while waiting for triggers
         if self.close_event.is_set() or self.stop_trigger.is_set():
             return
         self.camera_ready.clear()
