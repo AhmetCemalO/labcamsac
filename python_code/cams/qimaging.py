@@ -4,7 +4,7 @@ QImaging cameras
 
 from .generic_cam import GenericCam
 from .qimaging_dll import *
-from .utils import display
+from ..utils import display
 
 class QImagingCam(GenericCam):
     def __init__(self, cam_id = None,
@@ -65,7 +65,7 @@ class QImagingCam(GenericCam):
             
             display('QImaging - Camera ready!')
             self.camera_ready.set()
-            self.nframes.value = 0
+            
                 
     def set_cam_settings(self, triggerType = 0):
         self.cam.settings.readoutSpeed=0 # 0=20MHz, 1=10MHz, 7=40MHz

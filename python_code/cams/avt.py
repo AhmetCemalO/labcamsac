@@ -5,31 +5,26 @@ import time
 from multiprocessing import Event
 import numpy as np
 from pymba import *
-from .cams import GenericCam
-from .utils import display
+from .generic_cam import GenericCam
+from ..utils import display
 
 def AVT_get_ids():
     with Vimba() as vimba:
-        # get system object
-        system = vimba.getSystem()
-        # list available cameras (after enabling discovery for GigE cameras)
-        if system.GeVTLIsPresent:
-            system.runFeatureCommand("GeVDiscoveryAllOnce")
-        #time.sleep(0.01)
-        camsIds = vimba.getCameraIds()
-        cams = [vimba.getCamera(id) for id in camsIds]
-        camsModel = []
-        for cam_id,cam in zip(camsIds,cams):
+        cam_ids = vimba.camera_ids()
+        cams = [vimba.get_camera(id) for id in cam_ids]
+        cam_infos = []
+        for cam_id, cam in zip(cam_ids,cams):
             try:
-                cam.openCamera()
-                
+                cam.open()
             except:
-                camsModel.append('')
+                cam_infos.append('')
                 continue
-            camsModel.append('{0} {1} {2}'.format(cam.DeviceModelName,
+            cam.close()
+            print(cam.infos(), flush=True)
+            cam_infos.append('{0} {1} {2}'.format(cam.DeviceModelName,
                                                   cam.DevicePartNumber,
                                                   cam.DeviceID))
-    return camsIds,camsModel
+    return cam_ids, cam_infos
 
 class AVTCam(GenericCam):    
     def __init__(self, cam_id = None, outQ = None,
@@ -60,10 +55,6 @@ class AVTCam(GenericCam):
         self.triggerMode = triggerMode
         self.tickfreq = float(1.0)
         with Vimba() as vimba:
-            system = vimba.getSystem()
-            if system.GeVTLIsPresent:
-                system.runFeatureCommand("GeVDiscoveryAllOnce")
-            time.sleep(0.01)
             self.cam = vimba.getCamera(cam_id)
             self.cam.openCamera()
             names = self.cam.getFeatureNames()

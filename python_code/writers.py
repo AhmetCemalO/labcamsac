@@ -4,8 +4,6 @@ import sys
 from multiprocessing import Process,Queue,Event,Array,Value
 from ctypes import c_long, c_char_p
 from datetime import datetime
-import time
-import sys
 from .utils import display
 import numpy as np
 import os
@@ -17,19 +15,16 @@ import pandas as pd
 from skvideo.io import FFmpegWriter
 import cv2
 
-VERSION = '0.6'
+VERSION = 'B0.6'
 
 class GenericWriter(object):
     def __init__(self,
-                 inQ = None,
-                 loggerQ = None,
                  filename = pjoin('dummy','run'),
                  dataname = 'eyecam',
                  pathformat = pjoin('{datafolder}','{dataname}','{filename}',
                                     '{today}_{run}_{nfiles}'),
                  datafolder=pjoin(os.path.expanduser('~'),'data'),
                  framesperfile=0,
-                 sleeptime = 1./30,
                  incrementruns=True):
         if not hasattr(self,'extension'):
             self.extension = '.nan'
@@ -37,7 +32,6 @@ class GenericWriter(object):
         self.runs = 0
         self.write = False
         self.close = False
-        self.sleeptime = sleeptime # seconds
         self.framesperfile = framesperfile
         self.filename = ''
         self.datafolder = datafolder
@@ -102,7 +96,7 @@ class GenericWriter(object):
                 print(e)
         return filename
 
-    def open_file(self,nfiles = None,frame = None):
+    def open_file(self, frame):
         filename = self.get_filename_path()
         if not self.fd is None:
             self.close_file()
@@ -166,7 +160,7 @@ class GenericWriter(object):
             if (self.fd is None or
                 (self.framesperfile > 0 and np.mod(self.saved_frame_count,
                                                    self.framesperfile)==0)):
-                self.open_file(frame = frame)
+                self.open_file(frame)
                 if not self.inQ is None:
                     display('Queue size: {0}'.format(self.inQ.qsize()))
 
@@ -230,7 +224,6 @@ class GenericWriterProcess(Process,GenericWriter):
                                dataname=dataname,
                                pathformat=pathformat,
                                framesperfile=framesperfile,
-                               sleeptime=sleeptime,
                                incrementruns=incrementruns)
         Process.__init__(self)
         self.write = Event()
@@ -420,8 +413,6 @@ class FFMPEGWriter(GenericWriterProcess):
         if frame_rate <= 0:
             frame_rate = 30.
         self.frame_rate = frame_rate
-        self.w = None
-        self.h = None
         if hwaccel is None:
             self.doutputs = {'-format':'h264',
                              '-pix_fmt':'gray',
@@ -460,8 +451,6 @@ class FFMPEGWriter(GenericWriterProcess):
     def _open_file(self,filename,frame = None):
         if frame is None:
             raise ValueError('[Recorder] Need to pass frame to open a file.')
-        self.w = frame.shape[1]
-        self.h = frame.shape[0]
         if self.frame_rate is None:
             self.frame_rate = 0
         if self.frame_rate == 0:
@@ -542,405 +531,3 @@ class OpenCVWriter(GenericWriter):
         if len(frame.shape) < 2:
             frame = cv2.cvtColor(frame,cv2.COLOR_GRAY2RGB)
         self.fd.write(frame)
-
-        
-################################################################################
-################################################################################
-################################################################################
-
-class FFMPEGCamWriter(GenericWriter):
-    def __init__(self,
-                 cam,
-                 filename = pjoin('dummy','run'),
-                 dataname = 'eyecam',
-                 datafolder=pjoin(os.path.expanduser('~'),'data'),
-                 pathformat = pjoin('{datafolder}','{dataname}','{filename}',
-                                    '{today}_{run}_{nfiles}'),
-                 framesperfile=0,
-                 inQ = None,
-                 incrementruns=True,
-                 compression=None,
-                 hwaccel = None):
-        self.extension = '.avi'
-        self.cam = cam
-        self.nchannels = cam.nchan
-
-        super(FFMPEGCamWriter,self).__init__(filename=filename,
-                                             datafolder=datafolder,
-                                             dataname=dataname,
-                                             pathformat = pathformat,
-                                             framesperfile=framesperfile,
-                                             incrementruns=incrementruns,
-                                             inQ = inQ)
-
-        self.compression = compression
-        if self.compression is None:
-            self.compression = 0
-        frame_rate = cam.frame_rate
-        if frame_rate is None:
-            frame_rate = 0
-        if frame_rate <= 0:
-            frame_rate = 30.
-        self.frame_rate = frame_rate
-        self.w = None
-        self.h = None
-        if hwaccel is None:
-            self.doutputs = {'-format':'h264',
-                             '-pix_fmt':'gray',
-                             '-vcodec':'libx264',
-                             '-threads':str(10),
-                             '-crf':str(self.compression)}
-        else:            
-            if hwaccel == 'intel':
-                if self.compression == 0:
-                    display('Using compression 17 for the intel Media SDK encoder')
-                    self.compression = 17
-                self.doutputs = {'-format':'h264',
-                                 '-pix_fmt':'yuv420p',#'gray',
-                                 '-vcodec':'h264_qsv',#'libx264',
-                                 '-global_quality':str(25), # specific to the qsv
-                                 '-look_ahead':str(1),
-                                 #preset='veryfast',#'ultrafast',
-                                 '-threads':str(1),
-                                 '-crf':str(self.compression)}
-            elif hwaccel == 'nvidia':
-                if self.compression == 0:
-                    display('Using compression 25 for the NVIDIA encoder')
-                    self.compression = 25
-                self.doutputs = {'-vcodec':'h264_nvenc',
-                                 '-pix_fmt':'yuv420p',
-                                 '-cq:v':str(self.compression),
-                                 '-threads':str(1),
-                                 '-preset':'medium'}
-        self.hwaccel = hwaccel
-    def close_file(self):
-        if not self.fd is None:
-            self.fd.close()
-            print("------->>> Closed file.")
-        self.fd = None
-
-    def _open_file(self,filename,frame = None):
-        if frame is None:
-            raise ValueError('[Recorder] Need to pass frame to open a file.')
-        self.w = frame.shape[1]
-        self.h = frame.shape[0]
-        if self.frame_rate is None:
-            self.frame_rate = 0
-        if self.frame_rate == 0:
-            display('Using 30Hz frame rate for ffmpeg')
-            self.frame_rate = 30
-        
-        self.doutputs['-r'] =str(self.frame_rate)
-        self.dinputs = {'-r':str(self.frame_rate)}
-
-        # does a check for the datatype, if uint16 then save compressed lossless
-        if frame.dtype in [np.uint16] and len(frame.shape) == 2:
-            self.fd = FFmpegWriter(filename.replace(self.extension,'.mov'),
-                                   inputdict={'-pix_fmt':'gray16le',
-                                              '-r':str(self.frame_rate)}, # this is important
-                                   outputdict={'-c:v':'libopenjpeg',
-                                               '-pix_fmt':'gray16le',
-                                               '-r':str(self.frame_rate)})
-        else:
-            self.fd = FFmpegWriter(filename,
-                                   inputdict=self.dinputs,
-                                   outputdict=self.doutputs)
-            
-    def _write(self,frame,frameid,timestamp):
-        self.fd.writeFrame(frame)
-
-################################################################################
-################################################################################
-################################################################################
-
-class BinaryCamWriter(GenericWriter):
-    def __init__(self,
-                 cam,
-                 filename = pjoin('dummy','run'),
-                 dataname = 'eyecam',
-                 datafolder=pjoin(os.path.expanduser('~'),'data'),
-                 pathformat = pjoin('{datafolder}','{dataname}','{filename}',
-                                    '{today}_{run}_{nfiles}'),
-                 framesperfile=0,
-                 inQ = None,
-                 incrementruns=True):
-        self.extension = '_{nchannels}_{H}_{W}_{dtype}.dat'
-        self.cam = cam
-        self.nchannels = cam.nchan
-        super(BinaryCamWriter,self).__init__(filename=filename,
-                                             datafolder=datafolder,
-                                             dataname=dataname,
-                                             inQ = inQ,
-                                             pathformat = pathformat,
-                                             framesperfile=framesperfile,
-                                             incrementruns=incrementruns)
-        self.w = None
-        self.h = None
-
-    def close_file(self):
-        if not self.fd is None:
-            self.fd.close()
-            print("------->>> Closed file.")
-        self.fd = None
-
-    def _open_file(self,filename,frame = None):
-        self.w = frame.shape[1]
-        self.h = frame.shape[0]
-        dtype = frame.dtype
-        if dtype == np.float32:
-            dtype='float32'
-        elif dtype == np.uint8:
-            dtype='uint8'
-        else:
-            dtype='uint16'
-        filename = filename.format(nchannels = self.nchannels,
-                                   W=self.w,
-                                   H=self.h, dtype=dtype)
-        self.parsed_filename = filename
-        self.fd = open(filename,'wb')
-
-    def _write(self,frame,frameid,timestamp):
-        self.fd.write(frame)
-        
-class TiffCamWriter(GenericWriter):
-    def __init__(self,
-                 cam,
-                 filename = pjoin('dummy','run'),
-                 dataname = 'cam',
-                 datafolder=pjoin(os.path.expanduser('~'),'data'),
-                 pathformat = pjoin('{datafolder}','{dataname}','{filename}',
-                                    '{today}_{run}_{nfiles}'),
-                 framesperfile=256,
-                 sleeptime = 1./300,
-                 inQ = None,
-                 incrementruns=True,
-                 compression = None):
-        self.extension = '.tif'
-        self.cam = cam
-        super(TiffCamWriter,self).__init__(datafolder=datafolder,
-                                           filename=filename,
-                                           inQ = inQ,
-                                           dataname=dataname,
-                                           pathformat=pathformat,
-                                           framesperfile=framesperfile,
-                                           sleeptime=sleeptime,
-                                           incrementruns=incrementruns)
-        self.compression = None
-        if not compression is None:
-            self.compression = np.clip(compression,0,9)
-            
-    def close_file(self):
-        if not self.fd is None:
-            self.fd.close()
-            print("------->>> Closed file.")
-        self.fd = None
-
-    def _open_file(self,filename,frame = None):
-        self.fd = twriter(filename)
-
-    def _write(self,frame,frameid,timestamp):
-        self.fd.save(frame,
-                     compress=self.compression,
-                     description='id:{0};timestamp:{1}'.format(frameid,timestamp))
-        
-################################################################################
-################################################################################
-################################################################################
-
-def parseCamLog(fname, readTeensy = False):
-    logheaderkey = '# Log header:'
-    comments = []
-    with open(fname,'r') as fd:
-        for line in fd:
-            if line.startswith('#'):
-                line = line.strip('\n').strip('\r')
-                comments.append(line)
-                if line.startswith(logheaderkey):
-                    columns = line.strip(logheaderkey).strip(' ').split(',')
-
-    logdata = pd.read_csv(fname, 
-                          delimiter=',',
-                          header=None,
-                          comment='#',
-                          engine='c')
-    col = [c for c in logdata.columns]
-    for icol in range(len(col)):
-        if icol <= len(columns)-1:
-            col[icol] = columns[icol]
-        else:
-            col[icol] = 'var{0}'.format(icol)
-    logdata.columns = col
-    if readTeensy:
-        # get the sync pulses and frames along with the LED
-        def _convert(string):
-            try:
-                val = int(string)
-            except ValueError as err:
-                val = float(string)
-            return val
-
-        led = []
-        sync= []
-        ncomm = []
-        for l in comments:
-            if l.startswith('#LED:'):
-                led.append([_convert(f) for f in  l.strip('#LED:').split(',')])
-            elif l.startswith('#SYNC:'):
-                sync.append([0.] + [_convert(f) for f in  l.strip('#SYNC:').split(',')])
-            elif l.startswith('#SYNC1:'):
-                sync.append([1.] + [_convert(f) for f in  l.strip('#SYNC1:').split(',')])
-            else:
-                ncomm.append(l)
-        sync = pd.DataFrame(sync, columns=['sync','count','frame','timestamp'])
-        led = pd.DataFrame(led, columns=['led','frame','timestamp'])
-        return logdata,led,sync,ncomm
-    return logdata,comments
-
-parse_cam_log = parseCamLog
-
-class TiffStack(object):
-    def __init__(self,filenames):
-        if type(filenames) is str:
-            filenames = np.sort(glob(pjoin(filenames,'*.tif')))
-        
-        assert type(filenames) in [list,np.ndarray], 'Pass a list of filenames.'
-        self.filenames = filenames
-        for f in filenames:
-            assert os.path.exists(f), f + ' not found.'
-        # Get an estimate by opening only the first and last files
-        framesPerFile = []
-        self.files = []
-        for i,fn in enumerate(self.filenames):
-            if i == 0 or i == len(self.filenames)-1:
-                self.files.append(TiffFile(fn))
-            else:
-                self.files.append(None)                
-            f = self.files[-1]
-            if i == 0:
-                dims = f.series[0].shape
-                self.shape = dims
-            elif i == len(self.filenames)-1:
-                dims = f.series[0].shape
-            framesPerFile.append(np.int64(dims[0]))
-        self.framesPerFile = np.array(framesPerFile, dtype=np.int64)
-        self.framesOffset = np.hstack([0,np.cumsum(self.framesPerFile[:-1])])
-        self.nFrames = np.sum(framesPerFile)
-        self.curfile = 0
-        self.curstack = self.files[self.curfile].asarray()
-        N,self.h,self.w = self.curstack.shape[:3]
-        self.dtype = self.curstack.dtype
-        self.shape = (self.nFrames,self.shape[1],self.shape[2])
-    def getFrameIndex(self,frame):
-        '''Computes the frame index from multipage tiff files.'''
-        fileidx = np.where(self.framesOffset <= frame)[0][-1]
-        return fileidx,frame - self.framesOffset[fileidx]
-    def __getitem__(self,*args):
-        index  = args[0]
-        if not type(index) is int:
-            Z, X, Y = index
-            if type(Z) is slice:
-                index = range(Z.start, Z.stop, Z.step)
-            else:
-                index = Z
-        else:
-            index = [index]
-        img = np.empty((len(index),self.h,self.w),dtype = self.dtype)
-        for i,ind in enumerate(index):
-            img[i,:,:] = self.getFrame(ind)
-        return np.squeeze(img)
-    def getFrame(self,frame):
-        ''' Returns a single frame from the stack '''
-        fileidx,frameidx = self.getFrameIndex(frame)
-        if not fileidx == self.curfile:
-            if self.files[fileidx] is None:
-                self.files[fileidx] = TiffFile(self.filenames[fileidx])
-            self.curstack = self.files[fileidx].asarray()
-            self.curfile = fileidx
-        return self.curstack[frameidx,:,:]
-    def __len__(self):
-        return self.nFrames
-
-def mmap_dat(filename,
-             mode = 'r',
-             nframes = None,
-             shape = None,
-             dtype='uint16'):
-    '''
-    Loads frames from a binary file as a memory map.
-    This is useful when the data does not fit to memory.
-    
-    Inputs:
-        filename (str)       : fileformat convention, file ends in _NCHANNELS_H_W_DTYPE.dat
-        mode (str)           : memory map access mode (default 'r')
-                'r'   | Open existing file for reading only.
-                'r+'  | Open existing file for reading and writing.                 
-        nframes (int)        : number of frames to read (default is None: the entire file)
-        shape (list|tuple)   : dimensions (NCHANNELS, HEIGHT, WIDTH) default is None
-        dtype (str)          : datatype (default uint16) 
-    Returns:
-        A memory mapped  array with size (NFRAMES,[NCHANNELS,] HEIGHT, WIDTH).
-
-    Example:
-        dat = mmap_dat(filename)
-
-    Joao Couto - from wfield
-    '''
-    
-    if not os.path.isfile(filename):
-        raise OSError('File {0} not found.'.format(filename))
-    if shape is None or dtype is None: # try to get it from the filename
-        meta = os.path.splitext(filename)[0].split('_')
-        if shape is None:
-            try: # Check if there are multiple channels
-                shape = [int(m) for m in meta[-4:-1]]
-            except ValueError:
-                shape = [int(m) for m in meta[-3:-1]]
-        if dtype is None:
-            dtype = meta[-1]
-    dt = np.dtype(dtype)
-    if nframes is None:
-        # Get the number of samples from the file size
-        nframes = int(os.path.getsize(filename)/(np.prod(shape)*dt.itemsize))
-    dt = np.dtype(dtype)
-    return np.memmap(filename,
-                     mode=mode,
-                     dtype=dt,
-                     shape = (int(nframes),*shape))
-
-
-def stack_to_mj2_lossless(stack,fname, rate = 30):
-    '''
-    Compresses a uint16 stack with FFMPEG and libopenjpeg
-    
-    Inputs:
-        stack                : array or memorymapped binary file
-        fname                : output filename (will change extension to .mov)
-        rate                 : rate of the mj2 movie [30 Hz default]
-
-    Example:
-       from labcams.io import * 
-       fname = '20200710_140729_2_540_640_uint16.dat'
-       stack = mmap_dat(fname)
-       stack_to_mj2_lossless(stack,fname, rate = 30)
-    '''
-    ext = os.path.splitext(fname)[1]
-    assert len(ext), "[mj2 conversion] Need to pass a filename {0}.".format(fname)
-    
-    if not ext == '.mov':
-        print('[mj2 conversion] Changing extension to .mov')
-        outfname = fname.replace(ext,'.mov')
-    else:
-        outfname = fname
-    assert stack.dtype == np.uint16, "[mj2 conversion] This only works for uint16 for now."
-
-    nstack = stack.reshape([-1,*stack.shape[2:]]) # flatten if needed    
-    sq = FFmpegWriter(outfname, inputdict={'-pix_fmt':'gray16le',
-                                              '-r':str(rate)}, # this is important
-                      outputdict={'-c:v':'libopenjpeg',
-                                  '-pix_fmt':'gray16le',
-                                  '-r':str(rate)})
-    from tqdm import tqdm
-    for i,f in tqdm(enumerate(nstack),total=len(nstack)):
-        sq.writeFrame(f)
-    sq.close()
-    

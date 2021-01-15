@@ -25,10 +25,10 @@ setup(
     license = 'GPL',
     install_requires = requirements,
     url = "https://bitbucket.org/jpcouto/labcams",
-    packages = ['labcams'],
+    packages = ['python_code'],
     entry_points = {
         'console_scripts': [
-            'labcams = labcams.gui:main',
+            'labcams = python_code.gui:main',
         ]
     },
 )

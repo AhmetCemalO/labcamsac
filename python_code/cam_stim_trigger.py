@@ -3,17 +3,15 @@
 import serial
 import time
 import sys
-from multiprocessing import Process,Queue,Event,Value,Array
-from ctypes import c_char_p,c_longdouble,c_long
-import numpy as np
 import re
-
 import os
 from os.path import join as pjoin
-import csv
+from multiprocessing import Process,Queue,Event,Value,Array
+from ctypes import c_char_p,c_longdouble,c_long
 from datetime import datetime
+import csv
+import numpy as np
 
-import sys
 from .utils import display
 if sys.version_info >= (3, 0):
     long = lambda x: int(x)
@@ -35,7 +33,7 @@ FRAME = 'F'
 class CamStimInterface(Process):
     def __init__(self,port='COM3', baudrate=2000000,
                  inQ = None, outQ=None, saving = None, timeout=0.1):
-        Process.__init__(self)
+        super().__init__(self)
         if inQ is None:
             inQ = Queue()
         self.inQ = inQ

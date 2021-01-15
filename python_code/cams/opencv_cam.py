@@ -2,7 +2,7 @@ import time
 import cv2
 import numpy as np
 from .generic_cam import GenericCam
-from .utils import display
+from ..utils import display
 
 class OpenCVCam(GenericCam):
     """OpenCV camera; some functionality limited (like hardware triggers)

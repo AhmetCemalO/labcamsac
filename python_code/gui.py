@@ -1,41 +1,18 @@
+import socket
+import zmq
 from .utils import *
 from .cams import *
 from .io import *
 from .widgets import *
 
-LOGO = '''
-                                             MMM
-                                           MMMMMM
-    MMM:               .MMMM             MMMM MMMMMMMM
-    MMM:               .MMMM            MMMMM MMMMMMMM      
-    MMM:               .MMMM             MMMM  MMMMMM        MM 
-    MMM:  :MMMMMMMMM.  .MMMMOMMMMMM       MN     MMM      MMMMM 
-    MMM:  :M     MMMM  .MMMMM?+MMMMM    MMMMMMMMMMMMMMM7MMMMMMM  
-    MMM:         OMMM  .MMMM    MMMM    MMMMMMMMMMMMMMMMMMMMMMM 
-    MMM:  .MMMMMMMMMM  .MMMM    ?MMM    MMMMMMMMMMMMMMMMMMMMMMM 
-    MMM:  MMMM  .8MMM  .MMMM    ZMMM    MMMMMMMMMMMMMMMMMMMMMMM 
-    MMM:  MMM=...8MMM  .MMMM    MMMM    MMMMMMMMMMMMMMM.MMMMMMM  
-    MMM:  MMMMMMMMMMM  .MMMMMMMMMMM                        MMMM 
-    MMM:   MMMMM 8MMM  .MMMM:MMMMZ                            M 
+LOGO = "LABCAMS\n"
 
-         MMMMMMN  =MMMMMMMM     MMMM.MMMM$ .+MMMM      MMMMMMM: 
-       MMMMMMMMM  +MMMMMMMMM$   MMMMMMMMMMMMMMMMMM   MMMMMMMMM8 
-      MMMM               MMMM   MMMM   MMMM    MMM+  MMM8       
-      MMMZ          OMMMMMMMM   MMMM   NMMM    MMM?  MMMMMMM$   
-      MMMI        MMMMM  MMMM   MMMM   NMMM    MMM?   ZMMMMMMMM 
-      MMMM       7MMM    MMMM   MMMM   NMMM    MMM?        MMMM 
-       MMMMD+7MM  MMMN   MMMM   MMMM   NMMM    MMM?  MM$:.7MMMM   
-        MMMMMMMM  ZMMMMMOMMMM   MMMM   NMMM    MMM?  MMMMMMMM+                                                              
-                          https://bitbucket.org/jpcouto/labcams
-'''
 
-N_UDP = 1024
 
 class LabCamsGUI(QMainWindow):
     app = None
     cams = []
     def __init__(self,app = None, expName = 'test',
-                 camDescriptions = [],
                  parameters = {},
                  server = True,
                  saveOnStart = False,
@@ -45,161 +22,126 @@ class LabCamsGUI(QMainWindow):
         '''
         Graphical interface for controling labcams.
         '''
-        super(LabCamsGUI,self).__init__()
-        self.parameters = parameters
-        if not 'recorder_frames_per_file' in self.parameters.keys():
-            self.parameters['recorder_frames_per_file'] = 0
+        super().__init__()
+
+        default_parameters = {'recorder_frames_per_file':0,
+                              'server_refresh_time': 30,
+                              'recorder_path_format': pjoin('{datafolder}','{dataname}','{filename}','{today}_{run}_{nfiles}')}
+        self.parameters = {**default_parameters, **parameters}
+        
         self.app = app
         self.updateFrequency=updateFrequency
         self.saveOnStart = saveOnStart
-        self.cam_descriptions = camDescriptions
+        
         self.software_trigger = software_trigger
         self.triggered = Event()
         if triggered:
             self.triggered.set()
         else:
             self.triggered.clear()
+
         if server:
-            if not 'server_refresh_time' in self.parameters.keys():
-                self.parameters['server_refresh_time'] = 30
-            if not 'server' in self.parameters.keys():
-                self.parameters['server'] = 'zmq'
-            if self.parameters['server'] == 'udp':
-                import socket
-                self.udpsocket = socket.socket(socket.AF_INET, 
-                                     socket.SOCK_DGRAM) # UDP
-                self.udpsocket.bind(('0.0.0.0',
-                                     self.parameters['server_port']))
-                display('Listening to UDP port: {0}'.format(
-                    self.parameters['server_port']))
-                self.udpsocket.settimeout(.02)
-            else:
-                import zmq
-                self.zmqContext = zmq.Context()
-                self.zmqSocket = self.zmqContext.socket(zmq.REP)
-                self.zmqSocket.bind('tcp://0.0.0.0:{0}'.format(
-                    self.parameters['server_port']))
-                display('Listening to ZMQ port: {0}'.format(
-                    self.parameters['server_port']))
-            self.serverTimer = QTimer()
-            self.serverTimer.timeout.connect(self.serverActions)
-            self.serverTimer.start(self.parameters['server_refresh_time'])
+            self.socket = UDPSocket('0.0.0.0', self.parameters['server_port'])
+            socket_timer = QTimer()
+            socket_timer.timeout.connect(self.serverActions)
+            socket_timer.start(self.parameters['server_refresh_time'])
 
+        self.init_cameras()
 
-        # Init cameras
-        camdrivers = [cam['driver'].lower() for cam in camDescriptions]
-        if 'avt' in camdrivers:
-            from .avt import AVT_get_ids
-            try:
-                avtids,avtnames = AVT_get_ids()
-            except Exception as e:
-                display('[ERROR] AVT  camera error? Connections? Parameters?')
-                print(e)
+        self.initUI()
+        
+        self.camerasRunning = False
+        if hasattr(self,'camstim_widget'):
+            self.camstim_widget.ino.start()
+            self.camstim_widget.ino.disarm()
+
+        for cam,writer in zip(self.cams[::-1],self.writers[::-1]):
+            cam.start()
+            if not writer is None:
+                writer.init(cam)
+                writer.start()
+        
+        camready = 0
+        while camready != len(self.cams):
+            camready = np.sum([cam.camera_ready.is_set() for cam in self.cams])
+        display('Initialized cameras.')
+
+        if hasattr(self,'camstim_widget'):
+            self.camstim_widget.ino.arm()
+
+        self.triggerCams(soft_trigger = self.software_trigger,
+                         save=self.saveOnStart)
+    
+    def init_cameras(self):
+
         self.camQueues = []
         self.saveflags = []
         self.writers = []
         connected_avt_cams = []
+        
+        cam_descriptions = self.parameters.get('cams', [])
         for c,cam in enumerate(self.cam_descriptions):
             display("Connecting to camera [" + str(c) + '] : '+cam['name'])
-            if not 'Save' in cam.keys():
-                cam['Save'] = True
-            self.saveflags.append(cam['Save'])
-            if not 'recorder' in cam.keys():
-                # defaults tiff
-                cam['recorder'] = 'tiff'
-            if 'saveMethod' in cam.keys():
-                cam['recorder'] = cam['saveMethod']
-            if not 'compress' in cam.keys():
-                cam['compress'] = 0
-            if not 'recorder_path_format' in self.parameters.keys():
-                self.parameters['recorder_path_format'] = pjoin('{datafolder}','{dataname}','{filename}','{today}_{run}_{nfiles}')
+            
+            default_settings = {'Save': True, 'recorder': 'tiff', 'compress': 0}
+            cam = {**default_settings, **cam}
 
+            if 'saveMethod' in cam:
+                cam['recorder'] = cam['saveMethod']
+                
+            self.saveflags.append(cam['Save'])
             self.camQueues.append(Queue())
+            
             if 'noqueue' in cam['recorder']:
-                recorderpar = dict(
-                    recorder = cam['recorder'],
-                    datafolder = self.parameters['recorder_path'],
-                    framesperfile = self.parameters['recorder_frames_per_file'],
-                    pathformat = self.parameters['recorder_path_format'],
-                    compression = cam['compress'],
-                    filename = expName,
-                    dataname = cam['description'])
-                if 'ffmpeg' in cam['recorder']:
-                    if 'hwaccel' in cam.keys():
-                        recorderpar['hwaccel'] = cam['hwaccel']
+                recorderpar = {'recorder': cam['recorder'],
+                               'datafolder': self.parameters['recorder_path'],
+                               'framesperfile': self.parameters['recorder_frames_per_file'],
+                               'pathformat': self.parameters['recorder_path_format'],
+                               'compression': cam['compress'],
+                               'filename': expName,
+                               'dataname': cam['description'])}
+                if 'ffmpeg' in cam['recorder'] and 'hwaccel' in cam:
+                    recorderpar['hwaccel'] = cam['hwaccel']
             else:
                 display('Using the queue for recording.')
-                recorderpar = None # Use a queue recorder
+                recorderpar = None
+
             if cam['driver'].lower() == 'avt':
                 try:
-                    from .avt import AVTCam
-                except Exception as err:
-                    print(err)
-                    print(''' 
-
-                    Could not load the Allied Vision Technologies driver. 
-    
-    If you want to record from AVT cameras install the Vimba SDK and pimba.
-    If not you have the wrong config file.
-
-            Edit the file in USERHOME/labcams/default.json
-
-''')
-                    sys.exit(1)
-                    
+                    avtids,avtnames = AVT_get_ids()
+                except Exception as e:
+                    display('[ERROR] AVT  camera error? Connections? Parameters?')
+                    print(e)
                 camids = [(camid,name) for (camid,name) in zip(avtids,avtnames) 
-                          if cam['name'] in name]
-                camids = [camid for camid in camids
-                          if not camid[0] in connected_avt_cams]
+                          if (cam['name'] in name and not camid[0] in connected_avt_cams)]
                 if len(camids) == 0:
                     display('Could not find or already connected to: '+cam['name'])
                     display('Available AVT cameras:')
                     print('\n                -> '+
                           '\n                -> '.join(avtnames))
-                    
+                    print('EXITING')
                     sys.exit()
-                cam['name'] = camids[0][1]
-                if not 'TriggerSource' in cam.keys():
-                    cam['TriggerSource'] = 'Line1'
-                if not 'TriggerMode' in cam.keys():
-                    cam['TriggerMode'] = 'LevelHigh'
-                if not 'TriggerSelector' in cam.keys():
-                    cam['TriggerSelector'] = 'FrameStart'
-                if not 'AcquisitionMode' in cam.keys():
-                    cam['AcquisitionMode'] = 'Continuous'
-                if not 'AcquisitionFrameCount' in cam.keys():
-                    cam['AcquisitionFrameCount'] = 1000
-                if not 'nFrameBuffers' in cam.keys():
-                    cam['nFrameBuffers'] = 6
-                self.cams.append(AVTCam(camId=camids[0][0],
-                                        outQ = self.camQueues[-1],
-                                        frameRate=cam['frameRate'],
-                                        gain=cam['gain'],
-                                        triggered = self.triggered,
-                                        triggerSource = cam['TriggerSource'],
-                                        triggerMode = cam['TriggerMode'],
-                                        triggerSelector = cam['TriggerSelector'],
-                                        acquisitionMode = cam['AcquisitionMode'],
-                                        nTriggeredFrames = cam['AcquisitionFrameCount'],
-                                        nFrameBuffers = cam['nFrameBuffers'],
-                                        recorderpar = recorderpar))
-                connected_avt_cams.append(camids[0][0])
-            elif cam['driver'].lower() == 'qimaging':
-                try:
-                    from .qimaging import QImagingCam
-                except Exception as err:
-                    print(err)
-                    print(''' 
-
-                    Could not load the QImaging driver. 
-    If you want to record from QImaging cameras install the QImaging driver.
-    If not you have the wrong config file.
-
-            Edit the file in USERHOME/labcams/default.json and delete the QImaging cam or use the -c option 
-
-''')
-                    sys.exit(1)
                     
+                cam['name'] = camids[0][1]
+                
+                default_avt_settings = {'TriggerSource': 'Line1', 'TriggerMode': 'LevelHigh',
+                                        'TriggerSelector': 'FrameStart', 'AcquisitionMode': 'Continuous',
+                                        'AcquisitionFrameCount': 1000, 'nFrameBuffers': 6}
+                cam = {**default_avt_settings, **cam}
+                
+                key_src2dst = {'frameRate': 'frame_rate', 'gain': 'gain', 'TriggerSource': 'triggerSource',
+                               'TriggerMode': 'triggerMode', 'TriggerSelector': 'triggerSelector',
+                               'AcquisitionMode', 'acquisitionMode', 'AcquisitionFrameCount': 'nTriggeredFrames',
+                               'nFrameBuffers': 'nFrameBuffers'}
+                cam_params = {}
+                for key in key_src2dst:
+                    if key in cam:
+                        cam_params[key] = cam[key]
+                
+                self.cams.append(AVTCam(camId=camids[0][0], params = cam_params))
+                connected_avt_cams.append(camids[0][0])
+                
+            elif cam['driver'].lower() == 'qimaging':
                 if not 'binning' in cam.keys():
                     cam['binning'] = 2
                 self.cams.append(QImagingCam(camId=cam['id'],
@@ -218,24 +160,7 @@ class LabCamsGUI(QMainWindow):
                                            **cam,
                                            recorderpar = recorderpar))
             elif cam['driver'].lower() == 'pco':
-                try:
-                    from .pco import PCOCam
-                except Exception as err:
-                    print(err)
-                    print(''' 
-
-                    Could not load the PCO driver. 
-
-    If you want to record from PCO cameras install the PCO.sdk driver.
-    If not you have the wrong config file.
-
-            Edit the file in USERHOME/labcams/default.json and delete the PCO cam or use the -c option
-
-''')
-
-                    sys.exit(1)
-                    
-                if 'CamStimTrigger' in cam.keys():
+                if 'CamStimTrigger' in cam:
                     if not cam['CamStimTrigger'] is None:
                         self.camstim_widget = CamStimTriggerWidget(
                             port = cam['CamStimTrigger']['port'],
@@ -243,94 +168,19 @@ class LabCamsGUI(QMainWindow):
                         camstim = self.camstim_widget.ino
                 else:
                     camstim = None
-                if not 'binning' in cam.keys():
-                    cam['binning'] = None
                 self.cams.append(PCOCam(camId=cam['id'],
-                                        binning = cam['binning'],
-                                        exposure = cam['exposure'],
-                                        outQ = self.camQueues[-1],
-                                        acquisition_stim_trigger = camstim,
-                                        triggered = self.triggered,
-                                        recorderpar = recorderpar))
-            elif cam['driver'].lower() == 'ximea':
-                try:
-                    from .ximeacam import XimeaCam
-                except Exception as err:
-                    print(''' 
-
-                    Could not load the Ximea driver. 
-
-    If you want to record from Ximea cameras install the Ximea driver.
-    If not you have the wrong config file.
-
-            Edit the file in USERHOME/labcams/default.json and delete the ximea cam or use the -c option
-
-''')
-                    raise(err)
-                self.cams.append(XimeaCam(camId=cam['id'],
-                                          binning = cam['binning'],
-                                          exposure = cam['exposure'],
-                                          outQ = self.camQueues[-1],
-                                          triggered = self.triggered,
-                                          recorderpar = recorderpar))
-            elif cam['driver'].lower() == 'pointgrey':
-                try:
-                    from .pointgreycam import PointGreyCam
-                except Exception as err:
-                    print(err)
-
-                    print(''' 
-
-                    Could not load the PointGrey driver.
- 
-    If you want to record from PointGrey/FLIR cameras install the Spinaker SDK.
-    If not you have the wrong config file.
-
-            Edit the file in USERHOME/labcams/default.json and delete the PointGrey cam or use the -c option
-
-''')
-                    sys.exit()
-                if not 'roi' in cam.keys():
-                    cam['roi'] = []
-                if not 'pxformat' in cam.keys():
-                    cam['pxformat'] = 'Mono8' #'BayerRG8'
-                if not 'serial' in cam.keys():
-                    # camera serial number
-                    cam['serial'] = None 
-                if not 'binning' in cam.keys():
-                    cam['binning'] = None
-                if not 'exposure' in cam.keys():
-                    cam['exposure'] = None
-                if not 'gamma' in cam.keys():
-                    cam['gamma'] = None
-                if not 'hardware_trigger' in cam.keys():
-                    cam['hardware_trigger'] = None
-                if cam['roi'] is str:
-                    if ',' in cam['roi']:
-                        cam['roi'] = [int(c.strip('[').strip(']')) for c in cam['roi'].split(',')]
-                    else:
-                        cam['roi'] = []
-                self.cams.append(PointGreyCam(camId=cam['id'],
-                                              serial = cam['serial'],
-                                              gain = cam['gain'],
-                                              roi = cam['roi'],
-                                              frameRate = cam['frameRate'],
-                                              pxformat = cam['pxformat'],
-                                              exposure = cam['exposure'],
-                                              binning = cam['binning'],
-                                              gamma = cam['gamma'],
-                                              outQ = self.camQueues[-1],
-                                              triggered = self.triggered,
-                                              recorderpar = recorderpar,
-                                              hardware_trigger = cam['hardware_trigger']))
+                                        params = {'binning': cam.get('binning', None),
+                                                  'exposure': cam['exposure'],
+                                                  'triggered': self.triggered},
+                                        format = {'n_chan': camstim.nchannels}))
             else: 
-                display('[WARNING] -----> Unknown camera driver' +
-                        cam['driver'])
+                display('[WARNING] -----> Unknown camera driver' + cam['driver'])
                 self.camQueues.pop()
                 self.saveflags.pop()
-            if not 'recorder_sleep_time' in self.parameters.keys():
+            
+            if not 'recorder_sleep_time' in self.parameters:
                 self.parameters['recorder_sleep_time'] = 0.3
-            if 'SaveMethod' in cam.keys():
+            if 'SaveMethod' in cam:
                 cam['recorder'] = cam['SaveMethod']
                 display('SaveMethod is deprecated, use recorder instead.')
             if not 'noqueue' in cam['recorder']:
@@ -347,7 +197,7 @@ class LabCamsGUI(QMainWindow):
                                                    **towriter))
                 elif cam['recorder'] == 'ffmpeg':
                     display('Recording with ffmpeg')
-                    if not 'hwaccel' in cam.keys():
+                    if not 'hwaccel' in cam:
                         cam['hwaccel'] = None
                     self.writers.append(FFMPEGWriter(compression = cam['compress'],
                                                      hwaccel = cam['hwaccel'],
@@ -373,39 +223,16 @@ The recorders can be specified with the '"recorder":"ffmpeg"' option in each cam
             else:
                 self.writers.append(None)
                 
-            if 'CamStimTrigger' in cam.keys():
+            if 'CamStimTrigger' in cam:
                 self.camstim_widget.outQ = self.camQueues[-1]
             # Print parameters
             display('\t Camera: {0}'.format(cam['name']))
-            for k in np.sort(list(cam.keys())):
+            for k in np.sort(list(cam)):
                 if not k == 'name' and not k == 'recorder':
                     display('\t\t - {0} {1}'.format(k,cam[k]))
-        #self.resize(100,100)
-
-        self.initUI()
-        
-        self.camerasRunning = False
-        if hasattr(self,'camstim_widget'):
-            self.camstim_widget.ino.start()
-            self.camstim_widget.ino.disarm()
-
-        for cam,writer in zip(self.cams[::-1],self.writers[::-1]):
-            cam.start()
-            if not writer is None:
-                writer.init(cam)
-                writer.start()
-        
-        camready = 0
-        while camready != len(self.cams):
-            camready = np.sum([cam.camera_ready.is_set() for cam in self.cams])
-        display('Initialized cameras.')
-
-        if hasattr(self,'camstim_widget'):
-            self.camstim_widget.ino.arm()
-
-        self.triggerCams(soft_trigger = self.software_trigger,
-                         save=self.saveOnStart)
-
+                    
+                    
+                    
     def setExperimentName(self,expname):
         # Makes sure that the experiment name has the right slashes.
         if os.path.sep == '/':
@@ -422,29 +249,19 @@ The recorders can be specified with the '"recorder":"ffmpeg"' option in each cam
         self.recController.experimentNameEdit.setText(expname)
         
     def serverActions(self):
-        if self.parameters['server'] == 'zmq':
-            try:
-                message = self.zmqSocket.recv_pyobj(flags=zmq.NOBLOCK)
-            except:
-                return
-            self.zmqSocket.send_pyobj(dict(action='handshake'))
-        elif self.parameters['server'] == 'udp':
-            try:
-                msg,address = self.udpsocket.recvfrom(N_UDP)
-            except:
-                return
-            msg = msg.decode().split('=')
-            message = dict(action=msg[0])
-            if len(msg) > 1:
-                message = dict(message,value=msg[1])
+        msg, address = self.socket.receive()
+        msg = msg.decode().split('=')
+        message = dict(action=msg[0])
+        if len(msg) > 1:
+            message = dict(message,value=msg[1])
         #display('Server received message: {0}'.format(message))
         if message['action'].lower() == 'expname':
             self.setExperimentName(message['value'])
-            self.udpsocket.sendto(b'ok=expname',address)
+            self.socket.send(b'ok=expname',address)
         elif message['action'].lower() == 'softtrigger':
             self.recController.softTriggerToggle.setChecked(
                 int(message['value']))
-            self.udpsocket.sendto(b'ok=software_trigger',address)
+            self.socket.send(b'ok=software_trigger',address)
         elif message['action'].lower() == 'trigger':
             for cam in self.cams:
                 cam.stop_acquisition()
@@ -454,27 +271,27 @@ The recorders can be specified with the '"recorder":"ffmpeg"' option in each cam
                 #if not writer is None: # Logic moved to inside camera.
                 #    writer.write.clear()
             self.triggerCams(soft_trigger = self.software_trigger,save = True)
-            self.udpsocket.sendto(b'ok=save_hardwaretrigger',address)
+            self.socket.send(b'ok=save_hardwaretrigger',address)
         elif message['action'].lower() == 'settrigger':
             self.recController.camTriggerToggle.setChecked(
                 int(message['value']))
-            self.udpsocket.sendto(b'ok=hardware_trigger',address)
+            self.socket.send(b'ok=hardware_trigger',address)
         elif message['action'].lower() in ['setmanualsave','manualsave']:
             self.recController.saveOnStartToggle.setChecked(
                 int(message['value']))
-            self.udpsocket.sendto(b'ok=save',address)
+            self.socket.send(b'ok=save',address)
         elif message['action'].lower() == 'log':
             for cam in self.cams:
                 cam.eventsQ.put('log={0}'.format(message['value']))
             # write on display
             #self.camwidgets[0].text_remote.setText(message['value'])
-            self.udpsocket.sendto(b'ok=log',address)
+            self.socket.send(b'ok=log',address)
             self.recController.udpmessages.setText(message['value'])
         elif message['action'].lower() == 'ping':
             display('Server got PING.')
-            self.udpsocket.sendto(b'pong',address)
+            self.socket.send(b'pong',address)
         elif message['action'].lower() == 'quit':
-            self.udpsocket.sendto(b'ok=bye',address)
+            self.socket.send(b'ok=bye',address)
             self.close()
     def triggerCams(self,soft_trigger = True, save=False):
         # stops previous saves if there were any
@@ -566,16 +383,15 @@ The recorders can be specified with the '"recorder":"ffmpeg"' option in each cam
                     Qt.LeftDockWidgetArea,
                 self.camstim_tab)
             display('Init view: ' + str(c))
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.timerUpdate)
-        self.timer.start(self.updateFrequency)
+        timer = QTimer()
+        timer.timeout.connect(self.timerUpdate)
+        timer.start(self.updateFrequency)
         #self.move(0, 0)
         self.show()
-            	
+            
     def timerUpdate(self):
         for c,cam in enumerate(self.cams):
             try:
-                #self.camwidgets[c].image(frame,cam.nframes.value)
                 frame = cam.get_img()
                 if not frame is None:
                     self.camwidgets[c].image(frame,cam.nframes.value) #frame
@@ -587,9 +403,6 @@ The recorders can be specified with the '"recorder":"ffmpeg"' option in each cam
                 print(e, fname, exc_tb.tb_lineno)
 
     def closeEvent(self,event):
-        if hasattr(self,'serverTimer'):
-            self.serverTimer.stop()
-        self.timer.stop()
         if hasattr(self,'camstim_widget'):
             self.camstim_widget.ino.disarm()
             self.camstim_widget.close()
@@ -639,6 +452,7 @@ def main():
                         action='store_true')
     parser.add_argument('-c','--cam-select',
                         type=int,
+                        default=None,
                         nargs='+',
                         action='store')
     parser.add_argument('--no-server',
@@ -654,8 +468,6 @@ def main():
     opts = parser.parse_args()
 
     if opts.bin_to_mj2:
-        from labcams.io import mmap_dat
-        
         fname = opts.file
         
         assert not fname is None, "Need to supply a binary filename to compress."
@@ -676,13 +488,12 @@ def main():
         getPreferences(fname, create=True)
         sys.exit(s.exec_())
     parameters = getPreferences(opts.file)
-    cams = parameters['cams']
+
     if not opts.cam_select is None:
-        cams = [parameters['cams'][i] for i in opts.cam_select]
+        parameters['cams'] = [parameters['cams'][i] for i in opts.cam_select]
 
     app = QApplication(sys.argv)
     w = LabCamsGUI(app = app,
-                   camDescriptions = cams,
                    parameters = parameters,
                    server = not opts.no_server,
                    software_trigger = not opts.wait,
