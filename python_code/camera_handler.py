@@ -1,6 +1,6 @@
 from multiprocessing import Process,Queue,Event,Array,Value
 import numpy as np
-from .io import BinaryCamWriter, TiffCamWriter, FFMPEGCamWriter
+from .file_writer import BinaryWriter, TiffWriter, FFMPEGWriter, OpenCVWriter
 
 class CameraHandler(Process):
     
@@ -69,27 +69,13 @@ class CameraHandler(Process):
                     self.close_run()
     
     def _open_writer(self):
-        if not self.recorderpar is None:
-            extrapar = {}
-            if 'binary' in self.recorderpar['recorder'].lower():
-                rec = BinaryCamWriter
-            elif 'tiff' in self.recorderpar['recorder'].lower():
-                rec = TiffCamWriter
-            elif 'ffmpeg' in self.recorderpar['recorder'].lower():
-                rec = FFMPEGCamWriter 
-                if 'hwaccel' in self.recorderpar:
-                    extrapar['hwaccel'] =  self.recorderpar['hwaccel']
-            else:
-                display('Recorder {0} not implemented'.format(self.recorderpar['recorder']))
-            if 'rec' in dir():
-                self.recorder = rec(self,
-                                    inQ = self.queue,
-                                    filename = self.recorderpar['filename'],
-                                    pathformat = self.recorderpar['pathformat'],
-                                    dataname = self.recorderpar['dataname'],
-                                    datafolder = self.recorderpar['datafolder'],
-                                    framesperfile = self.recorderpar['framesperfile'],
-                                    incrementruns = True,**extrapar)
+        writer_dict_copy = self.writer_dict.copy()
+        writer_type = writer_dict_copy.pop('writer', 'opencv')
+        writers = {'opencv': OpenCVWriter, 'binary': BinaryCamWriter, 'tiff': TiffCamWriter, 'ffmpeg': FFMPEGCamWriter} 
+        writer = writers[writer_type]
+        std_keys = ['filename', 'dataname', 'datafolder', 'pathformat', 'frames_per_file'] 
+        dict = {key: writer_dict_copy[key] for key in std_keys}
+        return writer(**dict)
                                     
     def init_run(self):
         self.nframes.value = 0

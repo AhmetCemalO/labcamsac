@@ -5,7 +5,7 @@ import time
 import ctypes
 
 import numpy as np
-from ..utils import display
+from utils import display
 
 class GenericCam:
     """Generic class for interfacing with the cameras
@@ -24,6 +24,7 @@ class GenericCam:
         self.params = params if params is not None else {}
         self.format = format if format is not None else {}
         
+        self.triggered = False
         self.is_acquiring = False
     
     def _init_format(self):

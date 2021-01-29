@@ -25,7 +25,6 @@ def display(msg):
     except:
         pass
 
-
 preferencepath = pjoin(os.path.expanduser('~'), 'labcams')
 
 # This has the cameras and properties
