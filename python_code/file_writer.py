@@ -32,8 +32,7 @@ class RunWriter(Process):
         self.path_dict = {'datafolder':datafolder,'dataname':dataname,'filename':filename, 'today': today, 'extension': extension}
         
         self.frames_per_file = frames_per_file
-        
-        self.write_flag = Event() #outer flags are events
+
         self.close_flag = Event()
         self.stop_flag = Event()
         self.start_flag = Event()
@@ -108,12 +107,6 @@ class RunWriter(Process):
         """write specific"""
         pass
 
-    def enable(self):
-        self.write_flag.set()
-        
-    def disable(self):
-        self.write_flag.clear()
-
     def save(self,frame,metadata):
         try:
             self.inQ.put((frame,metadata), timeout = self.queue_timeout)
@@ -121,7 +114,6 @@ class RunWriter(Process):
             print("ERROR: could not save image, queue is full")
     
     def run(self):
-        self.write_flag.set()
         self.start_flag.set()
         while not self.close_flag.is_set():
             self.saved_frame_count = 0
@@ -141,14 +133,11 @@ class RunWriter(Process):
         self.stop_flag.clear()
   
     def _process_queue(self):
-        if self.write_flag.is_set():
-            while True:
-                try:
-                    self._save_next_in_queue()
-                except queue.Empty:
-                    break
-        else:
-            self.inQ.queue.clear()
+        while True:
+            try:
+                self._save_next_in_queue()
+            except queue.Empty:
+                break
             
     def _save_next_in_queue(self):
         buff = self.inQ.get(timeout = self.queue_timeout)

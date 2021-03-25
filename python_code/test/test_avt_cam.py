@@ -2,7 +2,6 @@ import unittest
 import sys
 import os
 from os.path import isfile, join, dirname, abspath
-import re
 import cv2
 
 test_path = dirname(abspath(__file__))
@@ -26,18 +25,29 @@ class TestAVTCam(unittest.TestCase):
         You can fix this error(on Windows) by accessing Ethernet settings > Change adapter options > Ethernet > IPv4 > Properties and setting an IP address close to the one of the camera (which you can find in Vimba Viewer."""
         with Vimba.get_instance() as vimba:
             cams = vimba.get_all_cameras()
-            with cams[0] as cam:
-                print(cam.get_id(), flush=True)
+            if len(cams) > 0:
+                with cams[0] as cam:
+                    print(cam.get_id(), flush=True)
+            else:
+                print("test_manufacturer_access_cams - NO AVT CAMERA CONNECTED, SKIP TEST")
 
     def test_access_cams(self):
         ids = self.get_ids()
-        for i in range(2):
-            with AVTCam(cam_id = ids[0]) as cam:
+        if len(ids) > 0:
+            for i in range(2):
+                with AVTCam(cam_id = ids[0]) as cam:
+                    img, _ = cam.image()
+                    cv2.imshow('frame',img)
+                    cv2.waitKey(200)
+                    cv2.destroyAllWindows()
+            with AVTCam() as cam:
                 img, _ = cam.image()
                 cv2.imshow('frame',img)
                 cv2.waitKey(200)
                 cv2.destroyAllWindows()
-            
+        else:
+            print("test_access_cams - NO AVT CAMERA CONNECTED, SKIP TEST")
+        
 
 if __name__ == '__main__':
     unittest.main()

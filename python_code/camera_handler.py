@@ -11,16 +11,17 @@ class CameraHandler(Process):
         
         self.close_event = Event()
         self.start_trigger = Event()
+        self.is_running = Event()
         self.stop_trigger = Event()
         self.camera_ready = Event()
         self.eventsQ = Queue()
         self.saving = Event()
         self.nframes = Value('i',0)
         
+        self.img = None
+        
         self.lastframeid = -1
         self.lasttime = 0
-        
-        self.daemon = True
         
     def _init_framebuffer(self, format):
         dtype  = format.get('dtype', None)
@@ -76,7 +77,14 @@ class CameraHandler(Process):
         std_keys = ['filename', 'dataname', 'datafolder', 'pathformat', 'frames_per_file'] 
         dict = {key: writer_dict_copy[key] for key in std_keys}
         return writer(**dict)
-                                    
+    
+    def _open_cam(self):
+        cam_dict_copy = self.cam_dict.copy()
+        cam_type = cam_dict_copy.pop('camera', 'avt_cam')
+        cameras = {'avt_cam': AVTCam, 'pco_cam': PCOCam} 
+        camera = cameras[cam_type]
+        return camera(**cam_dict_copy)
+    
     def init_run(self):
         self.nframes.value = 0
         self.lastframeid = -1
@@ -86,6 +94,7 @@ class CameraHandler(Process):
     
     def close_run(self):
         self.start_trigger.clear()
+        self.is_running.clear()
         
     def _update(self, frame, metadata):
         self._update_buffer(frame)
@@ -102,11 +111,22 @@ class CameraHandler(Process):
         while not self.start_trigger.is_set() or self.stop_trigger.is_set():
             # limits resolution to 1 ms
             time.sleep(0.001)
+        self.is_running.set()
         self.camera_ready.clear()
+    
+    def start_saving(self):
+        self.saving.set()
         
     def stop_saving(self):
         self.saving.clear()
     
+    def start_acquisition(self):
+        if self.camHandler.camera_ready.is_set():
+            self.start_trigger.set()
+            return True
+        print("Could not start acquisition, camera not ready")
+        return False
+        
     def stop_acquisition(self):
         self.stop_trigger.set()
 

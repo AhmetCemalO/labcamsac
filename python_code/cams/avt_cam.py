@@ -18,7 +18,15 @@ def AVT_get_ids():
 
 class AVTCam(GenericCam):
     def __init__(self, cam_id = None, params = None, format = None):
-    
+        
+        if cam_id is None:
+            ids, _ = AVT_get_ids()
+            if len(ids) > 0:
+                cam_id = ids[0]
+            else:
+                display('Need to supply a camera ID.')
+                assert cam_id is not None
+                
         super().__init__(name = 'PCO', cam_id = cam_id, params = params, format = format)
         
         default_params = {'exposure':29000, 'frame_rate':30,'gain':10,

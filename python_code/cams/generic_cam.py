@@ -13,10 +13,6 @@ class GenericCam:
     """
     def __init__(self, name = '', cam_id = None, params = None, format = None):
         
-        if cam_id is None:
-            display('Need to supply a camera ID.')
-            raise
-        
         self.name = name
         self.cam_id = cam_id
         self.cam_handle = None
