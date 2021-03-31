@@ -1,6 +1,8 @@
 import sys
 from argparse import ArgumentParser
+from PyQt5.QtWidgets import QApplication
 from view.widgets import LabcamsWindow
+from utils import get_preferences, display
 
 def main():
     """
@@ -11,12 +13,12 @@ def main():
                         type=str,help='Preference filename',default = None)
     args = parser.parse_args()
 
-    prefsel = args.pref
-
-    prefs = getPreferences(user = user,selection = prefsel)
+    ret, prefs = get_preferences(args.pref)
     
+    if not ret:
+        display('Warning: could not load preferences')
+
     app = QApplication(sys.argv)
-    display('Initializing Labcams GUI')
     w = LabcamsWindow(preferences = prefs)
     sys.exit(app.exec_())
 

@@ -27,7 +27,7 @@ class AVTCam(GenericCam):
                 display('Need to supply a camera ID.')
                 assert cam_id is not None
                 
-        super().__init__(name = 'PCO', cam_id = cam_id, params = params, format = format)
+        super().__init__(name = 'AVT', cam_id = cam_id, params = params, format = format)
         
         default_params = {'exposure':29000, 'frame_rate':30,'gain':10,
                           'frame_timeout':100, 'nFrameBuffers':10,
@@ -80,13 +80,16 @@ class AVTCam(GenericCam):
         
     
     def record(self):
-        pass
+        self.frame_generator = self.cam_handle.get_frame_generator()
         
     def stop(self):
         pass
         
     def image(self):
-        frame = self.cam_handle.get_frame()
+        if hasattr(self, 'frame_generator'):
+            frame = next(self.frame_generator)
+        else:
+            frame = self.cam_handle.get_frame()
         img = frame.as_opencv_image()
         frame_id = frame.get_id()
         timestamp = frame.get_timestamp()

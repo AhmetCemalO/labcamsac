@@ -3,8 +3,8 @@
 import time
 import numpy as np
 import pco
-from .generic_cam import GenericCam
-from ..utils import display
+from cams.generic_cam import GenericCam
+from utils import display
 
 class PCOCam(GenericCam):
     def __init__(self, cam_id = None, params = None, format = None):
@@ -12,7 +12,7 @@ class PCOCam(GenericCam):
         default_params = {'exposure':100, 'triggerSource': np.uint16(2),
                           'poll_timeout':1, 'trigger':0}
         params = {**default_params, **params}
-        params['exposure time'] = params.pop['exposure']
+        params['exposure time'] = params.pop('exposure')
 
         default_format = {'dtype': np.uint16}
         format = {**default_format, **format}

@@ -1,4 +1,5 @@
 README.rst
+setup.cfg
 setup.py
 pco/PCO_File.dll
 pco/PCO_Recorder.dll

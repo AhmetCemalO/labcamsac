@@ -352,6 +352,6 @@ class OpenCVWriter(RunWriter):
         return cv2.VideoWriter(filename, self.fourcc, self.frame_rate,(self.w,self.h))
                                   
     def _write(self,frame,frameid,timestamp):
-        if len(frame.shape) < 2:
+        if len(frame.shape) < 2 or frame.shape[2] == 1:
             frame = cv2.cvtColor(frame,cv2.COLOR_GRAY2RGB)
         self.file_handler.write(frame)

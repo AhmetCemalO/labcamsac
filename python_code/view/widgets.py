@@ -1,25 +1,44 @@
+import sys
+from os import path
+import numpy as np
+import cv2
 from PyQt5.QtGui import QImage, QPixmap, QIcon
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow
+from PyQt5.QtCore import Qt, QTimer
 
-from view.UI_labcams import Ui_Labcams
+from view.UI_labcams import Ui_LabCams
 from view.UI_cam import Ui_Cam
+from utils import display
+from camera_handler import CameraHandler
 
 class LabcamsWindow(QMainWindow):
     def __init__(self, preferences = None):
-        self.preferences = preferences
+        self.preferences = preferences if preferences is not None else {}
         
         super().__init__()
-        self.ui = Ui_Labcams()
+        self.ui = Ui_LabCams()
         self.ui.setupUi(self)
         self.setWindowIcon(QIcon(path.dirname(path.realpath(__file__)) + '/icon/labcam.png'))
         
-        self.cams = None
+        self.cam_handles = []
         for cam in self.preferences.get('cams', []):
-            self.setup_camera(cam)
+        
+            if cam['driver'] in ['avt']:
+                self.setup_camera(cam)
+                
+        self.ui.mdiArea.setActivationOrder(1)
 
+        self.show()
+        
     def setup_camera(self, cam):
-        
-        
+        #cam_dict, writer_dict
+        cam_dict = cam
+        writer_dict = {**self.preferences.get('recorder_params', {}), **cam_dict.get('recorder_params', {})}
+        cam_handler = CameraHandler(cam_dict, writer_dict)
+        self.cam_handles.append(cam_handler)
+        cam_handler.start()
+        widget = CamWidget(cam_handler)
+        self.setup_widget(cam_dict['description'], widget)
         
         
     def setup_widget(self, name, widget):
@@ -84,17 +103,19 @@ class LabcamsWindow(QMainWindow):
         """
         Clean up non GUI objects
         """
-        # display('[Closing connection to the rig and cleaning up screen]')
-        # self.expSetter.close()
+        for cam_handle in self.cam_handles:
+            cam_handle.close()
         display("Labcams out, bye!")
         
 def nparray_to_qimg(img):
-    height, width, channel = img.shape
-    bytesPerLine = channel * width
+    height, width, n_chan = img.shape
+    if n_chan == 1:
+        img =  cv2.cvtColor(img,cv2.COLOR_GRAY2RGB)
+    bytesPerLine = 3 * width
     return QImage(img.data, width, height, bytesPerLine, QImage.Format_RGB888)
         
 class CamWidget(QWidget):
-    def __init__(self, camHandler):
+    def __init__(self, camHandler = None):
         super().__init__()
         self.ui = Ui_Cam()
         self.ui.setupUi(self)
@@ -102,7 +123,6 @@ class CamWidget(QWidget):
         self.camHandler = camHandler
         
         self.save_folder = None
-        self.cam_is_running = False
         self.is_triggered = False
         
         self._timer = QTimer(self)
@@ -115,15 +135,16 @@ class CamWidget(QWidget):
         self.ui.trigger_checkBox.stateChanged.connect(self._trigger)
         
     def _update(self):
-        if self.cam_is_running:
-            self.update_img()
+        if self.camHandler is not None and self.camHandler.is_running.is_set():
+            self._update_img()
         super().update()
         
     def _update_img(self):
-        img = self.camHandler.img
+        img = self.camHandler.get_image()
         if img is not None:
             pixmap = QPixmap(nparray_to_qimg(img))
-            pixmap = pixmap.scaled(self.ui.img_label.width, self.ui.img_label.height, Qt.KeepAspectRatio)
+            
+            pixmap = pixmap.scaled(self.ui.img_label.width(), self.ui.img_label.height(), Qt.KeepAspectRatio)
             self.ui.img_label.setPixmap(pixmap)
 
     def _get_save_location(self):
@@ -131,23 +152,21 @@ class CamWidget(QWidget):
         self.ui.save_location_label.setText(self.save_folder)
 
     def _start_stop(self):
-        if self.ui.start_stop_pushButton.text == "Start":
+        if self.ui.start_stop_pushButton.text() == "Start":
             self._start_cam()
         else:
             self._stop_cam()
     
     def _start_cam(self):
-        if not self.camHandler.is_running.is_set():
+        if self.camHandler is not None:
             ret = self.camHandler.start_acquisition()
             if ret:
-                self.cam_is_running = True
                 self.ui.start_stop_pushButton.setText("Stop")
         else:
             print("Could not start cam, camera already running")
             
     def _stop_cam(self):
         self.camHandler.stop_acquisition()
-        self.cam_is_running = False
         self.ui.start_stop_pushButton.setText("Start")
         
     def _record(self, state):
