@@ -23,9 +23,6 @@ class AVTCam(GenericCam):
             ids, _ = AVT_get_ids()
             if len(ids) > 0:
                 cam_id = ids[0]
-            else:
-                display('Need to supply a camera ID.')
-                assert cam_id is not None
                 
         super().__init__(name = 'AVT', cam_id = cam_id, params = params, format = format)
         
@@ -41,6 +38,19 @@ class AVTCam(GenericCam):
 
         default_format = {'dtype': np.uint8}
         self.format = {**default_format, **self.format}
+    
+    def is_connected(self):
+        """To be checked before trying to open"""
+        ids, _ = AVT_get_ids()
+        if len(ids) == 0:
+            display('No AVT cams detected, check connections.')
+            return False
+        display(f'AVT cams detected: {ids}')
+        if self.cam_id in ids:
+            display(f'Requested AVT cam detected {self.cam_id}.')
+            return True
+        display(f'Requested AVT cam not detected {self.cam_id}, check connections.')
+        return False
         
     def __enter__(self):
         self.vimba = Vimba.get_instance()
@@ -55,6 +65,7 @@ class AVTCam(GenericCam):
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self.cam_handle.__exit__(exc_type, exc_value, exc_traceback)
         self.vimba.__exit__(exc_type, exc_value, exc_traceback)
+        return True
         
     def apply_settings(self):
         self.cam_handle.EventNotification = 'On'
@@ -75,7 +86,7 @@ class AVTCam(GenericCam):
             if self.acquisitionMode == 'MultiFrame':
                 self.cam_handle.AcquisitionFrameCount = self.params['nTriggeredFrames']
         else:
-            display('[Cam - {0}] Using no trigger.'.format(self.cam_id))
+            display(f'[{self.name} {self.cam_id}] Using no trigger.')
         # display(f'AVT - configuration: {self.cam_handle.get_all_features()}')
         
     

@@ -3,7 +3,7 @@ from os import path
 import numpy as np
 import cv2
 from PyQt5.QtGui import QImage, QPixmap, QIcon
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow, QFileDialog
 from PyQt5.QtCore import Qt, QTimer
 
 from view.UI_labcams import Ui_LabCams
@@ -35,11 +35,11 @@ class LabcamsWindow(QMainWindow):
         cam_dict = cam
         writer_dict = {**self.preferences.get('recorder_params', {}), **cam_dict.get('recorder_params', {})}
         cam_handler = CameraHandler(cam_dict, writer_dict)
-        self.cam_handles.append(cam_handler)
-        cam_handler.start()
-        widget = CamWidget(cam_handler)
-        self.setup_widget(cam_dict['description'], widget)
-        
+        if cam_handler.camera_connected:
+            self.cam_handles.append(cam_handler)
+            cam_handler.start()
+            widget = CamWidget(cam_handler)
+            self.setup_widget(cam_dict['description'], widget)
         
     def setup_widget(self, name, widget):
         """
@@ -129,10 +129,13 @@ class CamWidget(QWidget):
         self._timer.timeout.connect(self._update)
         self._timer.start(100)
         
+        self.AR_policy = Qt.KeepAspectRatio
+        
         self.ui.save_location_pushButton.clicked.connect(self._get_save_location)
         self.ui.start_stop_pushButton.clicked.connect(self._start_stop)
         self.ui.record_checkBox.stateChanged.connect(self._record)
         self.ui.trigger_checkBox.stateChanged.connect(self._trigger)
+        self.ui.keep_AR_checkBox.stateChanged.connect(self._pixmap_aspect_ratio)
         
     def _update(self):
         if self.camHandler is not None and self.camHandler.is_running.is_set():
@@ -143,12 +146,24 @@ class CamWidget(QWidget):
         img = self.camHandler.get_image()
         if img is not None:
             pixmap = QPixmap(nparray_to_qimg(img))
-            
-            pixmap = pixmap.scaled(self.ui.img_label.width(), self.ui.img_label.height(), Qt.KeepAspectRatio)
+            pixmap = pixmap.scaled(self.ui.img_label.width(), self.ui.img_label.height(), self.AR_policy)
             self.ui.img_label.setPixmap(pixmap)
-
+    
+    def _pixmap_aspect_ratio(self, state):
+        if state:
+            self.AR_policy = Qt.KeepAspectRatio
+        else:
+            self.AR_policy = Qt.IgnoreAspectRatio
+            
+    def resizeEvent(self, event):
+        pixmap = self.ui.img_label.pixmap()
+        if pixmap is not None:
+            self.ui.img_label.setMinimumSize(1,1)
+            pixmap = pixmap.scaled(self.ui.img_label.width(), self.ui.img_label.height(), self.AR_policy, Qt.SmoothTransformation)
+            self.ui.img_label.setPixmap(pixmap)
+        
     def _get_save_location(self):
-        self.save_folder, _ = QFileDialog.getExistingDirectory(self, 'Select folder', os.path.expanduser('~'), QFileDialog.ShowDirsOnly)
+        self.save_folder = QFileDialog.getExistingDirectory(self, 'Select folder', path.expanduser('~'), QFileDialog.ShowDirsOnly)
         self.ui.save_location_label.setText(self.save_folder)
 
     def _start_stop(self):

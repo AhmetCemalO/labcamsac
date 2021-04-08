@@ -8,7 +8,7 @@ import numpy as np
 from utils import display
 
 class GenericCam:
-    """Generic class for interfacing with the cameras
+    """Abstract class for interfacing with the cameras
     Has last frame on multiprocessing array
     """
     def __init__(self, name = '', cam_id = None, params = None, format = None):
@@ -28,6 +28,9 @@ class GenericCam:
         self.format['height'] = frame.shape[0]
         self.format['width'] = frame.shape[1]
         display(f"{self.name} - size: {self.format['height']} x {self.format['width']}")
+    
+    def is_connected(self):
+        pass
         
     def __enter__(self):
         return self

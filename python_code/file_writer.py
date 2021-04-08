@@ -194,7 +194,8 @@ class BinaryWriter(RunWriter):
                       datafolder=pjoin(os.path.expanduser('~'),'data'),
                       pathformat = pjoin('{datafolder}','{dataname}','{filename}',
                                     '{today}_{run}_{nfiles}'),
-                      frames_per_file = 0):
+                      frames_per_file = 0,
+                       **kwargs):
                       
         self.extension = '_{nchannels}_{H}_{W}_{dtype}.dat'
         super().__init__(filename=filename,
@@ -236,7 +237,8 @@ class FFMPEGWriter(RunWriter):
                        frames_per_file=0,
                        hwaccel = None,
                        frame_rate = None,
-                       compression=17):
+                       compression=17,
+                       **kwargs):
                        
         self.extension = '.avi'
         super().__init__(filename = filename,
@@ -325,7 +327,8 @@ class OpenCVWriter(RunWriter):
                        datafolder = pjoin(os.path.expanduser('~'),'data'),
                        frames_per_file = 0,
                        fourcc = 'XVID', #'X264'
-                       frame_rate = 60):
+                       frame_rate = 60,
+                       **kwargs):
         self.frame_rate = frame_rate
         cv2.setNumThreads(6)
         self.fourcc = cv2.VideoWriter_fourcc(*fourcc)

@@ -29,7 +29,10 @@ class CameraHandler(Process):
         self.lastframeid = -1
         self.lasttime = 0
         
-        self._init_framebuffer()
+        self.camera_connected = self._open_cam().is_connected()
+        
+        if self.camera_connected:
+            self._init_framebuffer()
         
     def _init_framebuffer(self):
         with self._open_cam() as cam:
@@ -37,8 +40,6 @@ class CameraHandler(Process):
             height = cam.format.get('height', None)
             width  = cam.format.get('width', None)
             n_chan = cam.format.get('n_chan', 1)
-            
-            
             
             if dtype == np.uint8:
                 cdtype = ctypes.c_ubyte
@@ -64,19 +65,23 @@ class CameraHandler(Process):
                         
     def run(self):
         self._init_buffer()
-        with self._open_writer() as writer:
-            with self._open_cam() as cam:
+        with self._open_cam() as cam:
+            self.cam = cam
+            
+            with self._open_writer() as writer:
                 while not self.close_event.is_set():
                     self.init_run()
                     display(f'[{cam.name} {cam.cam_id}] waiting for trigger.')
                     self.wait_for_trigger()
+                    if self.start_trigger.is_set():
+                        display(f'[{cam.name} {cam.cam_id}] start trigger set.')
                     cam.record()
                     while not self.stop_trigger.is_set():
                         frame, metadata = cam.image()
                         if self.saving.is_set():
                             writer.save(frame, metadata)
                         self._update(frame,metadata)
-                    display('[Camera] Stop trigger set.')
+                    display(f'[{cam.name} {cam.cam_id}] stop trigger set.')
                     self.close_run()
     
     def _open_writer(self):
@@ -86,7 +91,9 @@ class CameraHandler(Process):
         writer = writers[writer_type]
         std_keys = ['filename', 'dataname', 'datafolder', 'pathformat', 'frames_per_file'] 
         dict = {key: writer_dict_copy[key] for key in writer_dict_copy if key in std_keys}
+        dict['frame_rate'] = self.cam.params.get('frame_rate', None)
         return writer(**dict)
+    
     
     def _open_cam(self):
         cam_dict_copy = self.cam_dict.copy()
