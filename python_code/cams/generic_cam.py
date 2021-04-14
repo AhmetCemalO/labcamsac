@@ -45,7 +45,7 @@ class GenericCam:
     def apply_settings(self, cam):
         pass
         
-    def record(self):
+    def _record(self):
         '''start camera acq'''
         pass
 

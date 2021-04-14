@@ -58,7 +58,7 @@ class AVTCam(GenericCam):
         self.cam_handle = self.vimba.get_camera_by_id(self.cam_id)
         self.cam_handle.__enter__()
         self.apply_settings()
-        
+        self._record()
         self._init_format()
         return self
         
@@ -90,7 +90,7 @@ class AVTCam(GenericCam):
         # display(f'AVT - configuration: {self.cam_handle.get_all_features()}')
         
     
-    def record(self):
+    def _record(self):
         self.frame_generator = self.cam_handle.get_frame_generator()
         
     def stop(self):

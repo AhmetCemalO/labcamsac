@@ -75,7 +75,7 @@ class CameraHandler(Process):
                     self.wait_for_trigger()
                     if self.start_trigger.is_set():
                         display(f'[{cam.name} {cam.cam_id}] start trigger set.')
-                    cam.record()
+                    
                     while not self.stop_trigger.is_set():
                         frame, metadata = cam.image()
                         if self.saving.is_set():

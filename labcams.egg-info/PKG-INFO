@@ -1,6 +1,6 @@
 Metadata-Version: 1.0
 Name: labcams
-Version: 0.2.1
+Version: 1.0
 Summary: # labcams
 
 A package for video acquisition and automation of experimens, uses separate processes to record and store data.
@@ -69,9 +69,9 @@ The UDP commands are:
 * Add a message to the log ``log=MESSAGE``
 * Quit ``quit``
 
-Home-page: https://bitbucket.org/jpcouto/labcams
-Author: Joao Couto
-Author-email: jpcouto@gmail.com
+Home-page: UNKNOWN
+Author: Adrien Philippon
+Author-email: philippon.adrien@gmail.com
 License: GPL
 Description: # labcams
         

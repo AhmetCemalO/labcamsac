@@ -2,6 +2,7 @@ import sys
 from os import path
 import numpy as np
 import cv2
+import time
 from PyQt5.QtGui import QImage, QPixmap, QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow, QFileDialog
 from PyQt5.QtCore import Qt, QTimer
@@ -23,7 +24,7 @@ class LabcamsWindow(QMainWindow):
         self.cam_handles = []
         for cam in self.preferences.get('cams', []):
         
-            if cam['driver'] in ['avt']:
+            if cam['driver'] in ['avt', 'pco']:
                 self.setup_camera(cam)
                 
         self.ui.mdiArea.setActivationOrder(1)
@@ -105,14 +106,15 @@ class LabcamsWindow(QMainWindow):
         """
         for cam_handle in self.cam_handles:
             cam_handle.close()
+        time.sleep(0.5)
         display("Labcams out, bye!")
-        
+
+
 def nparray_to_qimg(img):
     height, width, n_chan = img.shape
-    if n_chan == 1:
-        img =  cv2.cvtColor(img,cv2.COLOR_GRAY2RGB)
-    bytesPerLine = 3 * width
-    return QImage(img.data, width, height, bytesPerLine, QImage.Format_RGB888)
+    format = QImage.Format_Grayscale8 if n_chan == 1 else QImage.Format_RGB888
+    bytesPerLine = n_chan * width
+    return QImage(img.data, width, height, bytesPerLine, format)
         
 class CamWidget(QWidget):
     def __init__(self, camHandler = None):
@@ -143,10 +145,10 @@ class CamWidget(QWidget):
         super().update()
         
     def _update_img(self):
-        img = self.camHandler.get_image()
+        img = np.copy(self.camHandler.get_image())
         if img is not None:
             pixmap = QPixmap(nparray_to_qimg(img))
-            pixmap = pixmap.scaled(self.ui.img_label.width(), self.ui.img_label.height(), self.AR_policy)
+            pixmap = pixmap.scaled(self.ui.img_label.width(), self.ui.img_label.height(), self.AR_policy, Qt.FastTransformation)
             self.ui.img_label.setPixmap(pixmap)
     
     def _pixmap_aspect_ratio(self, state):
@@ -178,7 +180,7 @@ class CamWidget(QWidget):
             if ret:
                 self.ui.start_stop_pushButton.setText("Stop")
         else:
-            print("Could not start cam, camera already running")
+            print("Could not start cam, camera already running", flush=True)
             
     def _stop_cam(self):
         self.camHandler.stop_acquisition()

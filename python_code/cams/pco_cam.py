@@ -8,34 +8,66 @@ from utils import display
 
 class PCOCam(GenericCam):
     def __init__(self, cam_id = None, params = None, format = None):
-
-        default_params = {'exposure':100, 'triggerSource': np.uint16(2),
-                          'poll_timeout':1, 'trigger':0}
-        params = {**default_params, **params}
-        params['exposure time'] = params.pop('exposure')
-
-        default_format = {'dtype': np.uint16}
-        format = {**default_format, **format}
-
-        super().__init__(name = 'PCO', cam_id = cam_id, params = params, format = format)
-
-        self.cam_handle = pco.Camera() #returns first pco camera it detects
-                                       #possibility to select specific interface/camera id via sdk
-        self.apply_settings()
         
-        self.record()
-        self._init_format()
+        cam_id = 0 # the cam_id is discarded for PCOCam, the pco.Camera class does not allow specific opening
+        # it is possible to select specific interface/camera id via sdk (or by adjusting init of Camera), 
+        # since we don't use multiple PCO's per setup, I will keep it simple
+        
+        super().__init__(name = 'PCO', cam_id = cam_id, params = params, format = format)
+        
+        default_params = {'exposure':15, 'triggerSource': 'external exposure start & software trigger',
+                          'poll_timeout':1, 'trigger':0}
+                          
+                            # 'triggerSource' options
+                            # * 'auto sequence'
+                            # * 'software trigger'
+                            # * 'external exposure start & software trigger'
+                            # * 'external exposure control'
+                            # * 'external synchronized'
+                            # * 'fast external exposure control'
+                            # * 'external CDS control'
+                            # * 'slow external exposure control'
+                            # * 'external synchronized HDSDI'
+        self.params = {**default_params, **self.params}
+        self.params['exposure time'] = self.params.pop('exposure')/1000
 
+        default_format = {'dtype': np.uint8}
+        self.format = {**default_format, **self.format}
+    
+    def is_connected(self):
+        """To be checked before trying to open"""
+        try:
+            cam = pco.Camera()
+            cam.close()
+            display('PCO cam detected.')
+            return True
+        except ValueError:
+            display('PCO cam not detected.')
+            return False
+        
+    def __enter__(self):
+        self.cam_handle = pco.Camera()
+        self.cam_handle.__enter__()
+        self.apply_settings()
+        self._record()
+        self._init_format()
+        return self
+        
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.stop()
+        self.cam_handle.__exit__(exc_type, exc_value, exc_traceback)
+        return True
+        
     def close(self):
         self.cam_handle.close()
 
     def apply_settings(self):
-        self.params['trigger'] = self.params['triggerSource'] if self.params['triggered'].is_set() else 0
-        self.cam_handle.configuration(self.params)
-        display(f'PCO - configuration: {self.cam_handle.configuration()}')
+        self.params['trigger'] = self.params['triggerSource'] if self.triggered else 'auto sequence'
+        self.cam_handle.configuration = self.params
+        display(f'PCO - configuration: {self.cam_handle.configuration}')
         
-    def record(self):
-        self.cam_handle.record()
+    def _record(self):
+        self.cam_handle.record(number_of_images=10, mode = 'fifo')
 
     def stop(self):
         self.cam_handle.stop()

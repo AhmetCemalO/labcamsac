@@ -9,26 +9,18 @@ from setuptools.command.install import install
 with open("readme-pip.md", "r") as fh:
     longdescription = fh.read()
 
-requirements = []
-with open("requirements.txt","r") as f:
-    requirements = f.read().splitlines()
-    
-data_path = pjoin(os.path.expanduser('~'), 'labcams')
-
 setup(
     name = 'labcams',
-    version = '0.2.1',
-    author = 'Joao Couto',
-    author_email = 'jpcouto@gmail.com',
+    version = '1.0',
+    author = 'Adrien Philippon',
+    author_email = 'philippon.adrien@gmail.com',
     description = (longdescription),
     long_description = longdescription,
     license = 'GPL',
-    install_requires = requirements,
-    url = "https://bitbucket.org/jpcouto/labcams",
     packages = ['python_code'],
     entry_points = {
         'console_scripts': [
-            'labcams = python_code.gui:main',
+            'labcams = python_code.__main__:main',
         ]
     },
 )

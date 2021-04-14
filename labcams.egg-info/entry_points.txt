@@ -1,3 +1,3 @@
 [console_scripts]
-labcams = python_code.gui:main
+labcams = python_code.__main__:main
 
