@@ -31,7 +31,7 @@ class PCOCam(GenericCam):
         self.params = {**default_params, **self.params}
         self.params['exposure time'] = self.params.pop('exposure')/1000
 
-        default_format = {'dtype': np.uint8}
+        default_format = {'dtype': np.uint16}
         self.format = {**default_format, **self.format}
     
     def is_connected(self):

@@ -112,8 +112,13 @@ class LabcamsWindow(QMainWindow):
 
 def nparray_to_qimg(img):
     height, width, n_chan = img.shape
-    format = QImage.Format_Grayscale8 if n_chan == 1 else QImage.Format_RGB888
-    bytesPerLine = n_chan * width
+    dtype = img.dtype
+    if dtype == np.uint16:
+        img = cv2.convertScaleAbs(img)
+    if n_chan == 1:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    format = QImage.Format_RGB888
+    bytesPerLine = 3 * width
     return QImage(img.data, width, height, bytesPerLine, format)
         
 class CamWidget(QWidget):
