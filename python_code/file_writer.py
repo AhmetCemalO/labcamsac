@@ -76,18 +76,17 @@ class RunWriter(Process):
         folder = os.path.dirname(filename)
         if folder == '':
             filename = pjoin(os.path.abspath(os.path.curdir),filename)
-            folder = os.path.dirname(filename)
-        if not os.path.exists(folder):
-            try:
-                os.makedirs(folder)
-            except Exception as e:
-                print("Could not create folder {0}".format(folder))
-                print(e)
         return filename
-        
+
     def _init_file_handler(self, frame):
         """open file generic"""
         filename = self.get_filename_path()
+        foldername = os.path.dirname(filename)
+        if not os.path.exists(foldername):
+            try:
+                os.makedirs(foldername)
+            except Exception as e:
+                print(f"Could not create folder {foldername} : {e}")
         self._release_file_handler()
         self.file_handler = self._get_file_handler(filename,frame)
         self.n_files += 1

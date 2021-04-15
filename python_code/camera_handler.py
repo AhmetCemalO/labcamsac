@@ -2,6 +2,7 @@ from multiprocessing import Process,Queue,Event,Array,Value
 import numpy as np
 import ctypes
 import time
+from os.path import dirname
 from cams.avt_cam import AVTCam
 from cams.pco_cam import PCOCam
 from file_writer import BinaryWriter, TiffWriter, FFMPEGWriter, OpenCVWriter
@@ -25,6 +26,8 @@ class CameraHandler(Process):
         self.nframes = Value('i',0)
         
         self.img = None
+        self.save_folder = Array('u',' ' * 1024)
+        self.set_save_folder("Loading...")
         
         self.lastframeid = -1
         self.lasttime = 0
@@ -67,8 +70,8 @@ class CameraHandler(Process):
         self._init_buffer()
         with self._open_cam() as cam:
             self.cam = cam
-            
             with self._open_writer() as writer:
+                self.save_folder = self.set_save_folder(dirname(writer.get_filename_path()))
                 while not self.close_event.is_set():
                     self.init_run()
                     display(f'[{cam.name} {cam.cam_id}] waiting for trigger.')
@@ -94,7 +97,15 @@ class CameraHandler(Process):
         dict['frame_rate'] = self.cam.params.get('frame_rate', None)
         return writer(**dict)
     
+    def get_save_folder(self):
+        return str(self.save_folder[:]).strip(' ')
     
+    def set_save_folder(self,folder):
+        for i in range(len(self.save_folder)):
+            self.save_folder[i] = ' '
+        for i in range(len(folder)):
+            self.save_folder[i] = folder[i]
+        
     def _open_cam(self):
         cam_dict_copy = self.cam_dict.copy()
         cam_type = cam_dict_copy.pop('driver', 'avt').lower()
@@ -105,7 +116,7 @@ class CameraHandler(Process):
     
     def get_image(self):
         return self.img
-        
+    
     def init_run(self):
         self.nframes.value = 0
         self.lastframeid = -1
@@ -126,7 +137,7 @@ class CameraHandler(Process):
     
     def _update_buffer(self,frame):
         self.img[:] = np.reshape(frame,self.img.shape)[:]
-    
+        
     def wait_for_trigger(self):
         while not self.start_trigger.is_set() and not self.stop_trigger.is_set():
             # limits resolution to 1 ms

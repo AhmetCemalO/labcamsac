@@ -15,7 +15,6 @@ def AVT_get_ids():
                                                   cam.get_id()))
     return cam_ids, cam_infos
 
-
 class AVTCam(GenericCam):
     def __init__(self, cam_id = None, params = None, format = None):
         
@@ -89,7 +88,6 @@ class AVTCam(GenericCam):
             display(f'[{self.name} {self.cam_id}] Using no trigger.')
         # display(f'AVT - configuration: {self.cam_handle.get_all_features()}')
         
-    
     def _record(self):
         self.frame_generator = self.cam_handle.get_frame_generator()
         

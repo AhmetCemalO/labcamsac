@@ -127,7 +127,6 @@ class CamWidget(QWidget):
         
         self.camHandler = camHandler
         
-        self.save_folder = None
         self.is_triggered = False
         
         self._timer = QTimer(self)
@@ -136,15 +135,17 @@ class CamWidget(QWidget):
         
         self.AR_policy = Qt.KeepAspectRatio
         
-        self.ui.save_location_pushButton.clicked.connect(self._get_save_location)
         self.ui.start_stop_pushButton.clicked.connect(self._start_stop)
         self.ui.record_checkBox.stateChanged.connect(self._record)
         self.ui.trigger_checkBox.stateChanged.connect(self._trigger)
         self.ui.keep_AR_checkBox.stateChanged.connect(self._pixmap_aspect_ratio)
         
     def _update(self):
-        if self.camHandler is not None and self.camHandler.is_running.is_set():
-            self._update_img()
+        if self.camHandler is not None:
+            dest = self.camHandler.get_save_folder()
+            self.ui.save_location_label.setText(dest)
+            if self.camHandler.is_running.is_set():
+                self._update_img()
         super().update()
         
     def _update_img(self):
@@ -164,12 +165,8 @@ class CamWidget(QWidget):
         pixmap = self.ui.img_label.pixmap()
         if pixmap is not None:
             self.ui.img_label.setMinimumSize(1,1)
-            pixmap = pixmap.scaled(self.ui.img_label.width(), self.ui.img_label.height(), self.AR_policy, Qt.SmoothTransformation)
+            pixmap = pixmap.scaled(self.ui.img_label.width(), self.ui.img_label.height(), self.AR_policy, Qt.FastTransformation)
             self.ui.img_label.setPixmap(pixmap)
-        
-    def _get_save_location(self):
-        self.save_folder = QFileDialog.getExistingDirectory(self, 'Select folder', path.expanduser('~'), QFileDialog.ShowDirsOnly)
-        self.ui.save_location_label.setText(self.save_folder)
 
     def _start_stop(self):
         if self.ui.start_stop_pushButton.text() == "Start":

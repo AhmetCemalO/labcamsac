@@ -1,0 +1,57 @@
+{
+    "cams": [
+        {
+            "description": "facecam",
+            "driver": "avt",
+            "name": "Mako G-030B",
+            "params": {
+                "NBackgroundFrames": 1.0,
+                "TriggerMode": "LevelHigh",
+                "TriggerSource": "Line1",
+                "gain": 0
+            },
+            "recorder_params": {
+                "recorder": "opencv",
+                "dataname": "facecam",
+                "filename": "test"
+            }
+        },
+        {
+            "description": "1photon",
+            "driver": "QImaging",
+            "id": 0,
+            "name": "qcam",
+            "params": {
+                "binning": 2,
+                "exposure": 100000,
+                "frameRate": 0.1,
+                "gain": 1500,
+                "triggerType": 1
+            }
+        },
+        {
+            "description": "1photon",
+            "driver": "pco",
+            "id": 0,
+            "name": "pco.edge",
+            "params": {
+                "exposure": 33,
+                "triggerType": 0
+            },
+            "recorder_params": {
+                "recorder": "binary"
+            }
+        }
+    ],
+    "recorder_params": {
+        "compress": 0,
+        "recorder_frames_per_file": 0,
+        "recorder_path_format": "{datafolder}\\{dataname}\\{filename}\\{today}_{run}_{nfiles}",
+        "recorder_sleep_time": 0.05
+    },
+    "server_params": {
+        "server": "udp",
+        "server_port": 9999,
+        "server_refresh_time": 30
+    }
+}
