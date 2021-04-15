@@ -26,6 +26,7 @@ class Ui_Cam(object):
         self.save_location_label.setMinimumSize(QtCore.QSize(0, 17))
         self.save_location_label.setMaximumSize(QtCore.QSize(16777215, 25))
         self.save_location_label.setText("")
+        self.save_location_label.setIndent(1)
         self.save_location_label.setObjectName("save_location_label")
         self.horizontalLayout.addWidget(self.save_location_label)
         self.verticalLayout.addLayout(self.horizontalLayout)
@@ -76,9 +77,13 @@ class Ui_Cam(object):
     def retranslateUi(self, Cam):
         _translate = QtCore.QCoreApplication.translate
         Cam.setWindowTitle(_translate("Cam", "Cam"))
+        self.save_location_label.setToolTip(_translate("Cam", "The path is entirely customizable through the preference file. You can also set it dynamically using the UDP server command \'expname\'"))
         self.start_stop_pushButton.setText(_translate("Cam", "Start"))
+        self.keep_AR_checkBox.setToolTip(_translate("Cam", "Toggle to maintain aspect ratio"))
         self.keep_AR_checkBox.setText(_translate("Cam", "Keep AR"))
+        self.record_checkBox.setToolTip(_translate("Cam", "Toggle to record the acquisition"))
         self.record_checkBox.setText(_translate("Cam", "Record"))
+        self.trigger_checkBox.setToolTip(_translate("Cam", "Toggle to trigger via UDP command \'trigger\'"))
         self.trigger_checkBox.setText(_translate("Cam", "Triggered"))
 
 

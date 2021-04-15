@@ -1,4 +1,5 @@
 import socket
+from utils import display
 
 buffer_bytes = 1024
 class UDPSocket:
@@ -7,7 +8,7 @@ class UDPSocket:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind((ip, port))
         self.socket.settimeout(.02)
-        print('Listening to UDP port: {0}'.format(port))
+        display(f'Listening to UDP port: {port}')
         
     def receive(self):
         msg,address = self.socket.recvfrom(buffer_bytes)

@@ -54,8 +54,14 @@
          <height>25</height>
         </size>
        </property>
+       <property name="toolTip">
+        <string>The path is entirely customizable through the preference file. You can also set it dynamically using the UDP server command 'expname'</string>
+       </property>
        <property name="text">
         <string/>
+       </property>
+       <property name="indent">
+        <number>1</number>
        </property>
       </widget>
      </item>
@@ -103,6 +109,9 @@
          <height>17</height>
         </size>
        </property>
+       <property name="toolTip">
+        <string>Toggle to maintain aspect ratio</string>
+       </property>
        <property name="text">
         <string>Keep AR</string>
        </property>
@@ -118,6 +127,9 @@
          <width>16777215</width>
          <height>25</height>
         </size>
+       </property>
+       <property name="toolTip">
+        <string>Toggle to record the acquisition</string>
        </property>
        <property name="text">
         <string>Record</string>
@@ -137,6 +149,9 @@
          <width>0</width>
          <height>25</height>
         </size>
+       </property>
+       <property name="toolTip">
+        <string>Toggle to trigger via UDP command 'trigger'</string>
        </property>
        <property name="text">
         <string>Triggered</string>

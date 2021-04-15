@@ -19,17 +19,17 @@ class RunWriter(Process):
     sleeptime = 0.05
     queue_timeout = 0.05
     
-    def __init__(self, filename = 'dummy',
+    def __init__(self, folder = 'dummy',
                        dataname = 'eyecam',
                        datafolder= pjoin(os.path.expanduser('~'),'data'),
-                       pathformat = pjoin('{datafolder}','{dataname}','{filename}','{today}_{run}_{nfiles}'),
+                       pathformat = pjoin('{datafolder}','{dataname}','{folder}','{today}_{run}_{nfiles}'),
                        extension = 'log',
                        frames_per_file = 0):
         super().__init__()
         
         self.path_format = pathformat
         today = datetime.today().strftime('%Y%m%d')
-        self.path_dict = {'datafolder':datafolder,'dataname':dataname,'filename':filename, 'today': today, 'extension': extension}
+        self.path_dict = {'datafolder':datafolder,'dataname':dataname,'folder':folder, 'today': today, 'extension': extension}
         
         self.frames_per_file = frames_per_file
 
@@ -37,8 +37,8 @@ class RunWriter(Process):
         self.stop_flag = Event()
         self.start_flag = Event()
         
-        self.filename = Array('u',' ' * 1024)
-        self.set_filename(filename)
+        self.folder = Array('u',' ' * 1024)
+        self.set_folder(folder)
         self.inQ = Queue()
 
         self.file_handler = None
@@ -56,37 +56,37 @@ class RunWriter(Process):
         self.close()
         self.join()
     
-    def set_filename(self,filename):
+    def set_folder(self,folder):
         if self.start_flag.is_set():
             self.stop_flag.set()
-        for i in range(len(self.filename)):
-            self.filename[i] = ' '
-        for i in range(len(filename)):
-            self.filename[i] = filename[i]
-        display('Filename updated: ' + self.get_filename_as_string())
+        for i in range(len(self.folder)):
+            self.folder[i] = ' '
+        for i in range(len(folder)):
+            self.folder[i] = folder[i]
+        display('Folder updated: ' + self.get_folder_as_string())
         
-    def get_filename_as_string(self):
-        return str(self.filename[:]).strip(' ')
+    def get_folder_as_string(self):
+        return str(self.folder[:]).strip(' ')
+    
+    def get_folder_path(self):
+        return os.path.dirname(self.get_filename_path())
         
     def get_filename_path(self):
         self.path_dict['run'] = 'run{0:03d}'.format(self.n_run)
         self.path_dict['nfiles'] = '{0:08d}'.format(self.n_files)
-        self.path_dict['filename'] = self.get_filename_as_string()
+        self.path_dict['folder'] = self.get_folder_as_string()
         filename = (self.path_format + '.{extension}').format(**self.path_dict)
-        folder = os.path.dirname(filename)
-        if folder == '':
-            filename = pjoin(os.path.abspath(os.path.curdir),filename)
         return filename
 
     def _init_file_handler(self, frame):
         """open file generic"""
         filename = self.get_filename_path()
-        foldername = os.path.dirname(filename)
-        if not os.path.exists(foldername):
+        folder = os.path.dirname(filename)
+        if not os.path.exists(folder):
             try:
-                os.makedirs(foldername)
+                os.makedirs(folder)
             except Exception as e:
-                print(f"Could not create folder {foldername} : {e}")
+                print(f"Could not create folder {folder} : {e}")
         self._release_file_handler()
         self.file_handler = self._get_file_handler(filename,frame)
         self.n_files += 1
@@ -159,16 +159,16 @@ class RunWriter(Process):
         
 class TiffWriter(RunWriter):
     def __init__(self,
-                 filename = pjoin('dummy','run'),
+                 folder = pjoin('dummy','run'),
                  dataname = 'cam',
-                 pathformat = pjoin('{datafolder}','{dataname}','{filename}',
+                 pathformat = pjoin('{datafolder}','{dataname}','{folder}',
                                     '{today}_{run}_{nfiles}'),
                  datafolder=pjoin(os.path.expanduser('~'),'data'),
                  frames_per_file=256,
                  compression=None):
         self.extension = '.tif'
         super().__init__(datafolder=datafolder,
-                         filename=filename,
+                         folder=folder,
                          dataname=dataname,
                          pathformat=pathformat,
                          frames_per_file=frames_per_file)
@@ -188,16 +188,16 @@ class TiffWriter(RunWriter):
                                description='id:{0};timestamp:{1}'.format(frameid,timestamp))
 
 class BinaryWriter(RunWriter):
-    def __init__(self,filename = pjoin('dummy','run'),
+    def __init__(self,folder = pjoin('dummy','run'),
                       dataname = 'eyecam',
                       datafolder=pjoin(os.path.expanduser('~'),'data'),
-                      pathformat = pjoin('{datafolder}','{dataname}','{filename}',
+                      pathformat = pjoin('{datafolder}','{dataname}','{folder}',
                                     '{today}_{run}_{nfiles}'),
                       frames_per_file = 0,
                        **kwargs):
                       
         self.extension = '_{nchannels}_{H}_{W}_{dtype}.dat'
-        super().__init__(filename=filename,
+        super().__init__(folder=folder,
                          datafolder=datafolder,
                          dataname=dataname,
                          pathformat = pathformat,
@@ -229,10 +229,10 @@ class BinaryWriter(RunWriter):
             display('Wrote frame id - {0}'.format(frameid))
         
 class FFMPEGWriter(RunWriter):
-    def __init__(self, filename = pjoin('dummy','run'),
+    def __init__(self, folder = pjoin('dummy','run'),
                        dataname = 'eyecam',
                        datafolder=pjoin(os.path.expanduser('~'),'data'),
-                       pathformat = pjoin('{datafolder}','{dataname}','{filename}','{today}_{run}_{nfiles}'),
+                       pathformat = pjoin('{datafolder}','{dataname}','{folder}','{today}_{run}_{nfiles}'),
                        frames_per_file=0,
                        hwaccel = None,
                        frame_rate = None,
@@ -240,7 +240,7 @@ class FFMPEGWriter(RunWriter):
                        **kwargs):
                        
         self.extension = '.avi'
-        super().__init__(filename = filename,
+        super().__init__(folder = folder,
                          datafolder = datafolder,
                          dataname = dataname,
                          pathformat = pathformat,
@@ -320,9 +320,9 @@ class FFMPEGWriter(RunWriter):
         self.fd.writeFrame(frame)
 
 class OpenCVWriter(RunWriter):
-    def __init__(self, filename = pjoin('dummy','run'),
+    def __init__(self, folder = pjoin('dummy','run'),
                        dataname = 'eyecam',
-                       pathformat = pjoin('{datafolder}','{dataname}','{filename}','{today}_{run}_{nfiles}'),
+                       pathformat = pjoin('{datafolder}','{dataname}','{folder}','{today}_{run}_{nfiles}'),
                        datafolder = pjoin(os.path.expanduser('~'),'data'),
                        frames_per_file = 0,
                        fourcc = 'XVID', #'X264'
@@ -333,7 +333,7 @@ class OpenCVWriter(RunWriter):
         self.fourcc = cv2.VideoWriter_fourcc(*fourcc)
         self.w = None
         self.h = None
-        super().__init__(filename = filename,
+        super().__init__(folder = folder,
                          datafolder=datafolder,
                          pathformat = pathformat,
                          dataname=dataname,

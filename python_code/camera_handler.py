@@ -71,7 +71,8 @@ class CameraHandler(Process):
         with self._open_cam() as cam:
             self.cam = cam
             with self._open_writer() as writer:
-                self.save_folder = self.set_save_folder(dirname(writer.get_filename_path()))
+                self.writer = writer
+                self._update_save_folder(writer.get_folder_path())
                 while not self.close_event.is_set():
                     self.init_run()
                     display(f'[{cam.name} {cam.cam_id}] waiting for trigger.')
@@ -100,11 +101,16 @@ class CameraHandler(Process):
     def get_save_folder(self):
         return str(self.save_folder[:]).strip(' ')
     
-    def set_save_folder(self,folder):
+    def _update_save_folder(self, folder):
         for i in range(len(self.save_folder)):
             self.save_folder[i] = ' '
         for i in range(len(folder)):
             self.save_folder[i] = folder[i]
+        
+    def set_save_folder(self,folder):
+        self._update_save_folder(folder)
+        if hasattr(self, 'writer'):
+            self.writer.set_folder(self.save_folder)
         
     def _open_cam(self):
         cam_dict_copy = self.cam_dict.copy()
@@ -155,7 +161,7 @@ class CameraHandler(Process):
         if self.camera_ready.is_set():
             self.start_trigger.set()
             return True
-        print("Could not start acquisition, camera not ready")
+        print(f"Could not start acquisition, camera {self.cam_dict['description']} not ready", flush=True)
         return False
         
     def stop_acquisition(self):

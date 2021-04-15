@@ -4,9 +4,10 @@ import numpy as np
 import cv2
 import time
 from PyQt5.QtGui import QImage, QPixmap, QIcon
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow, QFileDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow, QAction
 from PyQt5.QtCore import Qt, QTimer
 
+from udp_socket import UDPSocket
 from view.UI_labcams import Ui_LabCams
 from view.UI_cam import Ui_Cam
 from utils import display
@@ -26,10 +27,52 @@ class LabcamsWindow(QMainWindow):
         
             if cam['driver'] in ['avt', 'pco']:
                 self.setup_camera(cam)
-                
+        
+        server_params = self.preferences.get('server_params', None)
+        if server_params is not None:
+            server = server_params.get('server', None)
+            if server == "udp":
+                self.server = UDPSocket('0.0.0.0', server_params.get('server_port', 9999))
+                self._timer = QTimer(self)
+                self._timer.timeout.connect(self.process_server_messages)
+                self._timer.start(server_params.get('server_refresh_time', 100))
+        
         self.ui.mdiArea.setActivationOrder(1)
-
+        
+        self.ui.menuView.triggered[QAction].connect(self.viewMenuActions)
+        
         self.show()
+    
+    def set_save_path(self, save_path):
+        if os.path.sep == '/': # Makes sure that the experiment name has the right slashes.
+            save_path = save_path.replace('\\',os.path.sep)
+        save_path = save_path.strip(' ')
+        for cam_handle in self.cam_handles:
+            cam_handle.set_save_folder(save_path)
+        
+    def process_server_messages(self):
+        try:
+            msg,address = self.server.receive()
+        except Exception:
+            return
+        action, *value = [i.lower() for i in msg.decode().split('=')]
+        if action == 'ping':
+            display('Server got PING.')
+            self.server.send(b'pong',address)
+            
+        elif action == 'expname':
+            self.set_save_path(value)
+            self.server.send(b'ok=expname',address)
+            
+        elif action == 'trigger':
+            for cam_handle in self.cam_handles:
+                cam_handle.start_acquisition()
+            self.server.send(b'ok=trigger',address)
+        
+        elif action == 'quit':
+            self.server.send(b'ok=bye',address)
+            self.close()
+            
         
     def setup_camera(self, cam):
         #cam_dict, writer_dict
@@ -71,7 +114,6 @@ class LabcamsWindow(QMainWindow):
         :param q:
         :type q: QAction
         """
-        display(q.text()+ " clicked")
         if q.text() == 'Subwindow View':
             self.ui.mdiArea.setViewMode(0)
         if q.text() == 'Tabbed View':
@@ -92,11 +134,8 @@ class LabcamsWindow(QMainWindow):
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
         if reply == QMessageBox.Yes:
-            self.close()
             event.accept()
-            print('Window closed')
-            QApplication.quit()
-            sys.exit()
+            self.close()
         else:
             event.ignore()
 
@@ -108,6 +147,8 @@ class LabcamsWindow(QMainWindow):
             cam_handle.close()
         time.sleep(0.5)
         display("Labcams out, bye!")
+        QApplication.quit()
+        sys.exit()
 
 
 def nparray_to_qimg(img):
@@ -146,6 +187,10 @@ class CamWidget(QWidget):
             self.ui.save_location_label.setText(dest)
             if self.camHandler.is_running.is_set():
                 self._update_img()
+            if self.camHandler.start_trigger.is_set() and not self.camHandler.stop_trigger.is_set():
+                self.ui.start_stop_pushButton.setText("Stop")
+            else:
+                self.ui.start_stop_pushButton.setText("Start")
         super().update()
         
     def _update_img(self):
