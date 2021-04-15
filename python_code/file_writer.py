@@ -69,30 +69,29 @@ class RunWriter(Process):
         return str(self.folder[:]).strip(' ')
     
     def get_folder_path(self):
-        return os.path.dirname(self.get_filename_path())
+        return os.path.dirname(self.get_filepath())
         
-    def get_filename_path(self):
+    def get_filepath(self):
         self.path_dict['run'] = 'run{0:03d}'.format(self.n_run)
         self.path_dict['nfiles'] = '{0:08d}'.format(self.n_files)
         self.path_dict['folder'] = self.get_folder_as_string()
-        filename = (self.path_format + '.{extension}').format(**self.path_dict)
-        return filename
+        filepath = (self.path_format + '.{extension}').format(**self.path_dict)
+        return filepath
 
     def _init_file_handler(self, frame):
         """open file generic"""
-        filename = self.get_filename_path()
-        folder = os.path.dirname(filename)
+        filepath = self.get_filepath()
+        folder = os.path.dirname(filepath)
         if not os.path.exists(folder):
             try:
                 os.makedirs(folder)
             except Exception as e:
                 print(f"Could not create folder {folder} : {e}")
         self._release_file_handler()
-        self.file_handler = self._get_file_handler(filename,frame)
+        self.file_handler = self._get_file_handler(filepath,frame)
         self.n_files += 1
-        display('Opened: '+ filename)
         
-    def _get_file_handler(self, filename, frame):
+    def _get_file_handler(self, filepath, frame):
         """get specific file handler"""
         pass
         
@@ -179,8 +178,9 @@ class TiffWriter(RunWriter):
             elif compression > 0:
                 self.compression = compression
 
-    def _get_file_handler(self,filename,frame = None):
-        return twriter(filename)
+    def _get_file_handler(self,filepath,frame = None):
+        display('Opening: '+ filepath)
+        return twriter(filepath)
 
     def _write(self,frame,frameid,timestamp):
         self.file_handler.save(frame,
@@ -196,19 +196,14 @@ class BinaryWriter(RunWriter):
                       frames_per_file = 0,
                        **kwargs):
                       
-        self.extension = '_{nchannels}_{H}_{W}_{dtype}.dat'
         super().__init__(folder=folder,
                          datafolder=datafolder,
                          dataname=dataname,
                          pathformat = pathformat,
-                         frames_per_file=frames_per_file)
-        self.w = None
-        self.h = None
-        self.buf = []
-
-    def _get_file_handler(self,filename,frame = None):
-        self.w = frame.shape[1]
-        self.h = frame.shape[0]
+                         frames_per_file=frames_per_file,
+                         extension = '_{n_chan}_{H}_{W}_{dtype}.dat')
+        
+    def _get_file_handler(self,filepath,frame = None):
         dtype = frame.dtype
         if dtype == np.float32:
             dtype='float32'
@@ -216,15 +211,15 @@ class BinaryWriter(RunWriter):
             dtype='uint8'
         else:
             dtype='uint16'
-        filename = filename.format(nchannels = self.nchannels,
-                                   W=self.w,
-                                   H=self.h,
-                                   dtype=dtype) 
-        self.parsed_filename = filename
-        return open(filename,'wb')
+        filepath = filepath.format(n_chan = frame.shape[2],
+                                        W = frame.shape[1],
+                                        H = frame.shape[0],
+                                    dtype = dtype)
+        display('Opening: '+ filepath)
+        return open(filepath,'wb')
         
     def _write(self,frame,frameid,timestamp):
-        self.fd.write(frame)
+        self.file_handler.write(frame)
         if np.mod(frameid,5000) == 0: 
             display('Wrote frame id - {0}'.format(frameid))
         
@@ -239,12 +234,12 @@ class FFMPEGWriter(RunWriter):
                        compression=17,
                        **kwargs):
                        
-        self.extension = '.avi'
         super().__init__(folder = folder,
                          datafolder = datafolder,
                          dataname = dataname,
                          pathformat = pathformat,
-                         frames_per_file = frames_per_file)
+                         frames_per_file = frames_per_file,
+                         extension = '.avi')
                          
         self.compression = compression
         if frame_rate is None:
@@ -291,7 +286,7 @@ class FFMPEGWriter(RunWriter):
         if hasattr(cam,'nchan'):
             self.nchannels = cam.nchan
 
-    def _get_file_handler(self,filename,frame = None):
+    def _get_file_handler(self,filepath,frame = None):
         if frame is None:
             raise ValueError('[Recorder] Need to pass frame to open a file.')
         if self.frame_rate is None:
@@ -302,22 +297,23 @@ class FFMPEGWriter(RunWriter):
         
         self.doutputs['-r'] =str(self.frame_rate)
         self.dinputs = {'-r':str(self.frame_rate)}
-
+        
         # does a check for the datatype, if uint16 then save compressed lossless
         if frame.dtype in [np.uint16] and len(frame.shape) == 2:
-            return FFmpegWriter(filename.replace(self.extension,'.mov'),
-                                   inputdict={'-pix_fmt':'gray16le',
-                                              '-r':str(self.frame_rate)}, # this is important
-                                   outputdict={'-c:v':'libopenjpeg',
-                                               '-pix_fmt':'gray16le',
-                                               '-r':str(self.frame_rate)})
+            filepath = filepath.replace(self.extension,'.mov')
+            inputdict={'-pix_fmt':'gray16le',
+                      '-r':str(self.frame_rate)} # this is important
+            outputdict={'-c:v':'libopenjpeg',
+                       '-pix_fmt':'gray16le',
+                       '-r':str(self.frame_rate)}
         else:
-            return FFmpegWriter(filename,
-                                   inputdict=self.dinputs,
-                                   outputdict=self.doutputs)
+            inputdict=self.dinputs
+            outputdict=self.doutputs
+        display('Opening: '+ filepath)
+        return FFmpegWriter(filepath, inputdict=inputdict, outputdict=outputdict)
             
     def _write(self,frame,frameid,timestamp):
-        self.fd.writeFrame(frame)
+        self.file_handler.writeFrame(frame)
 
 class OpenCVWriter(RunWriter):
     def __init__(self, folder = pjoin('dummy','run'),
@@ -345,13 +341,14 @@ class OpenCVWriter(RunWriter):
             self.file_handler.release()
             self.file_handler = None
 
-    def _get_file_handler(self,filename,frame = None):
+    def _get_file_handler(self,filepath,frame = None):
         self.w = frame.shape[1]
         self.h = frame.shape[0]
         self.isColor = False
         if len(frame.shape) < 2:
             self.isColor = True
-        return cv2.VideoWriter(filename, self.fourcc, self.frame_rate,(self.w,self.h))
+        display('Opening: '+ filepath)
+        return cv2.VideoWriter(filepath, self.fourcc, self.frame_rate,(self.w,self.h))
                                   
     def _write(self,frame,frameid,timestamp):
         if len(frame.shape) < 2 or frame.shape[2] == 1:

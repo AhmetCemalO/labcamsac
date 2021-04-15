@@ -27,6 +27,7 @@ class GenericCam:
         frame, _ = self.image()
         self.format['height'] = frame.shape[0]
         self.format['width'] = frame.shape[1]
+        self.format['n_chan'] = frame.shape[2]
         display(f"{self.name} - size: {self.format['height']} x {self.format['width']}")
     
     def is_connected(self):

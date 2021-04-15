@@ -90,10 +90,10 @@ class CameraHandler(Process):
     
     def _open_writer(self):
         writer_dict_copy = self.writer_dict.copy()
-        writer_type = writer_dict_copy.pop('writer', 'opencv')
+        writer_type = writer_dict_copy.pop('recorder', 'opencv')
         writers = {'opencv': OpenCVWriter, 'binary': BinaryWriter, 'tiff': TiffWriter, 'ffmpeg': FFMPEGWriter} 
         writer = writers[writer_type]
-        std_keys = ['filename', 'dataname', 'datafolder', 'pathformat', 'frames_per_file'] 
+        std_keys = ['folder', 'dataname', 'datafolder', 'pathformat', 'frames_per_file'] 
         dict = {key: writer_dict_copy[key] for key in writer_dict_copy if key in std_keys}
         dict['frame_rate'] = self.cam.params.get('frame_rate', None)
         return writer(**dict)
