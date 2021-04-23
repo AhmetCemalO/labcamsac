@@ -65,7 +65,7 @@ def write_template_to_file(filepath):
     with open(filepath, 'w') as outfile:
         json.dump(get_default_preferences(), outfile, sort_keys = True, indent = 4)
     display('Saved editable template to: ' + filepath)
-    
+
 def get_preferences(filepath = None, create_template = True):
     """
     
@@ -75,6 +75,7 @@ def get_preferences(filepath = None, create_template = True):
     if path.isfile(filepath):
         with open(filepath, 'r') as infile:
             pref = json.load(infile)
+        pref['user_path'] = filepath
         return True, pref
     else:
         if create_template:

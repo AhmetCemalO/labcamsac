@@ -27,9 +27,12 @@ class RunWriter(Process):
                        frames_per_file = 0):
         super().__init__()
         
+        self.folder = folder
+        self.folder_array = Array('u',' ' * 1024)
+        
         self.path_format = pathformat
         today = datetime.today().strftime('%Y%m%d')
-        self.path_dict = {'datafolder':datafolder,'dataname':dataname,'folder':folder, 'today': today, 'extension': extension}
+        self.path_dict = {'datafolder':datafolder,'dataname':dataname,'folder': folder, 'today': today, 'extension': extension}
         
         self.frames_per_file = frames_per_file
 
@@ -37,8 +40,6 @@ class RunWriter(Process):
         self.stop_flag = Event()
         self.start_flag = Event()
         
-        self.folder = Array('u',' ' * 1024)
-        self.set_folder(folder)
         self.inQ = Queue()
 
         self.file_handler = None
@@ -59,14 +60,14 @@ class RunWriter(Process):
     def set_folder(self,folder):
         if self.start_flag.is_set():
             self.stop_flag.set()
-        for i in range(len(self.folder)):
-            self.folder[i] = ' '
+        for i in range(len(self.folder_array)):
+            self.folder_array[i] = ' '
         for i in range(len(folder)):
-            self.folder[i] = folder[i]
-        display('Folder updated: ' + self.get_folder_as_string())
+            self.folder_array[i] = folder[i]
+        display('Folder updated: ' + self.get_folder_path())
         
     def get_folder_as_string(self):
-        return str(self.folder[:]).strip(' ')
+        return str(self.folder_array[:]).strip(' ')
     
     def get_folder_path(self):
         return os.path.dirname(self.get_filepath())
@@ -112,6 +113,7 @@ class RunWriter(Process):
             print("ERROR: could not save image, queue is full")
     
     def run(self):
+        self.set_folder(self.folder)
         self.start_flag.set()
         while not self.close_flag.is_set():
             self.saved_frame_count = 0

@@ -1,5 +1,6 @@
 import sys
 from os import path
+from os.path import join, dirname
 import numpy as np
 import cv2
 import time
@@ -10,6 +11,7 @@ from PyQt5.QtCore import Qt, QTimer
 from udp_socket import UDPSocket
 from view.UI_labcams import Ui_LabCams
 from view.UI_cam import Ui_Cam
+from view.UI_cam_settings import Ui_Settings
 from utils import display
 from camera_handler import CameraHandler
 
@@ -74,9 +76,9 @@ class LabcamsWindow(QMainWindow):
             self.close()
             
         
-    def setup_camera(self, cam):
-        #cam_dict, writer_dict
-        cam_dict = cam
+    def setup_camera(self, cam_dict):
+        if 'settings_file' in cam_dict.get('params', {}):
+            cam_dict['params']['settings_file'] = join(dirname(self.preferences['user_path']), 'configs', cam_dict['params']['settings_file'])
         writer_dict = {**self.preferences.get('recorder_params', {}), **cam_dict.get('recorder_params', {})}
         cam_handler = CameraHandler(cam_dict, writer_dict)
         if cam_handler.camera_connected:
@@ -181,10 +183,13 @@ class CamWidget(QWidget):
         self.ui.trigger_checkBox.stateChanged.connect(self._trigger)
         self.ui.keep_AR_checkBox.stateChanged.connect(self._pixmap_aspect_ratio)
         
+        self.settings = CamSettingsWidget(self.camHandler)
+        self.ui.settings_pushButton.clicked.connect(self._toggle_settings)
+        
     def _update(self):
         if self.camHandler is not None:
             dest = self.camHandler.get_save_folder()
-            self.ui.save_location_label.setText(dest)
+            self.ui.save_location_label.setText('Folder: ' + dest)
             if self.camHandler.is_running.is_set():
                 self._update_img()
             if self.camHandler.start_trigger.is_set() and not self.camHandler.stop_trigger.is_set():
@@ -239,3 +244,44 @@ class CamWidget(QWidget):
     
     def _trigger(self, state):
         self.is_triggered = state
+        
+    def _toggle_settings(self):
+        is_visible = self.settings.isVisible()
+        self.settings.setVisible(not is_visible)
+        if not is_visible:
+            self.settings.init_fields()
+
+class CamSettingsWidget(QWidget):
+    def __init__(self, camHandler = None):
+        super().__init__()
+        self.ui = Ui_Settings()
+        self.ui.setupUi(self)
+        
+        self.camHandler = camHandler
+        
+        self.ui.apply_pushButton.clicked.connect(self._apply_settings)
+        self.ui.autogain_checkBox.stateChanged.connect(self._autogain)
+        self._autogain(self.ui.autogain_checkBox.isChecked())
+        
+        self.settings = {'frame_rate': self.ui.framerate_lineEdit,
+                         'exposure': self.ui.exposure_lineEdit,
+                         'gain': self.ui.gain_lineEdit}
+    
+    def _autogain(self, state):
+        self.ui.gain_lineEdit.setEnabled(not state)
+            
+    def _apply_settings(self):
+        for setting in self.settings:
+            val = self.settings[setting].text()
+            if val.isdigit():
+                self.camHandler.set_cam_param(setting, int(val))
+        self.camHandler.set_cam_param('gain_auto', self.ui.autogain_checkBox.isChecked())
+        
+    def init_fields(self):
+        self.camHandler.query_cam_params()
+        while not self.camHandler.cam_param_get_flag.is_set():
+            time.sleep(0.01)
+        params = self.camHandler.get_cam_params()
+        if params is not None:
+            for setting in self.settings:
+                self.settings[setting].setText(str(params[setting]))

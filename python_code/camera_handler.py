@@ -1,4 +1,5 @@
 from multiprocessing import Process,Queue,Event,Array,Value
+import queue
 import numpy as np
 import ctypes
 import time
@@ -8,6 +9,13 @@ from cams.pco_cam import PCOCam
 from file_writer import BinaryWriter, TiffWriter, FFMPEGWriter, OpenCVWriter
 from utils import display
 
+def clear_queue(my_queue):
+    while True:
+        try:
+            my_queue.get_nowait()
+        except queue.Empty:
+            break
+                
 class CameraHandler(Process):
     
     def __init__(self, cam_dict, writer_dict):
@@ -21,9 +29,12 @@ class CameraHandler(Process):
         self.is_running = Event()
         self.stop_trigger = Event()
         self.camera_ready = Event()
-        self.eventsQ = Queue()
         self.saving = Event()
         self.nframes = Value('i',0)
+        
+        self.cam_param_InQ = Queue()
+        self.cam_param_OutQ = Queue()
+        self.cam_param_get_flag = Event()
         
         self.img = None
         self.save_folder = Array('u',' ' * 1024)
@@ -72,8 +83,9 @@ class CameraHandler(Process):
             self.cam = cam
             with self._open_writer() as writer:
                 self.writer = writer
-                self._update_save_folder(writer.get_folder_path())
+                self._update_save_folder(self.writer.get_folder_as_string())
                 while not self.close_event.is_set():
+                    self._process_queues()
                     self.init_run()
                     display(f'[{cam.name} {cam.cam_id}] waiting for trigger.')
                     self.wait_for_trigger()
@@ -81,6 +93,7 @@ class CameraHandler(Process):
                         display(f'[{cam.name} {cam.cam_id}] start trigger set.')
                     
                     while not self.stop_trigger.is_set():
+                        self._process_queues()
                         frame, metadata = cam.image()
                         if self.saving.is_set():
                             writer.save(frame, metadata)
@@ -109,8 +122,6 @@ class CameraHandler(Process):
         
     def set_save_folder(self,folder):
         self._update_save_folder(folder)
-        if hasattr(self, 'writer'):
-            self.writer.set_folder(self.save_folder)
         
     def _open_cam(self):
         cam_dict_copy = self.cam_dict.copy()
@@ -126,6 +137,8 @@ class CameraHandler(Process):
     def init_run(self):
         self.nframes.value = 0
         self.lastframeid = -1
+        if self.get_save_folder() != self.writer.get_folder_as_string():
+            self.writer.set_folder(self.save_folder)
         self.camera_ready.set()
     
     def close_run(self):
@@ -133,7 +146,7 @@ class CameraHandler(Process):
         if not self.close_event.is_set():
             self.stop_trigger.clear()
         self.is_running.clear()
-        
+
     def _update(self, frame, metadata):
         self._update_buffer(frame)
         self.nframes.value += 1
@@ -146,11 +159,71 @@ class CameraHandler(Process):
         
     def wait_for_trigger(self):
         while not self.start_trigger.is_set() and not self.stop_trigger.is_set():
-            # limits resolution to 1 ms
-            time.sleep(0.001)
+            self._process_queues()
+            time.sleep(0.001) # limits resolution to 1 ms
         self.is_running.set()
         self.camera_ready.clear()
     
+    def _process_queues(self):
+        self._process_params()
+    
+    def _process_params(self):
+        """ self.cam_param_InQ is setget
+            ('set', param, val)
+            ('get') -> returns all params # TODO should we get the actual values of the acquisition rather than the last inputs?
+            self.cam_param_OutQ is queried params
+            (param, val) [only queried params]
+        """
+        params_to_set = False
+        while True:
+            try:
+               param = self.cam_param_InQ.get_nowait()
+            except queue.Empty:
+                break
+            else:
+                if param[0] == 'get':
+                    try:
+                        clear_queue(self.cam_param_OutQ)
+                        self.cam_param_OutQ.put_nowait(self.cam.params)
+                    except queue.Full:
+                        pass
+                    self.cam_param_get_flag.set()
+                elif param[0] == 'set':
+                    self.cam.set_param(param[1], param[2])
+                    params_to_set = True
+        if params_to_set:
+            self.cam.apply_params()
+
+    def set_cam_param(self, param : str, val):
+        try:
+            self.cam_param_InQ.put_nowait(['set', param, val])
+        except queue.Full:
+            print(f"Warning: could not set cam params, order queue is full", flush=True)
+    
+    def query_cam_params(self):
+        try:
+            self.cam_param_InQ.put_nowait(['get'])
+        except queue.Full:
+            print(f"Warning: could not query cam params, order queue is full", flush=True)
+                
+    def get_cam_params(self):
+        if not self.cam_param_get_flag.is_set():
+            print(f"Warning: check cam_param_get_flag before calling this function, returning.", flush=True)
+            return
+        n_loop = 0
+        ret = None
+        while True:
+            try:
+                ret = self.cam_param_OutQ.get_nowait()
+                self.cam_param_get_flag.clear()
+            except queue.Empty:
+                break
+            n_loop += 1
+        if n_loop > 1:
+            print(f"Warning: you queried the cam params {n_loop} times and only got them once", flush=True)
+        
+        return ret
+        
     def start_saving(self):
         self.saving.set()
         

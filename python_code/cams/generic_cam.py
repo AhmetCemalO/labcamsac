@@ -22,6 +22,8 @@ class GenericCam:
         
         self.triggered = False
         self.is_acquiring = False
+        
+        self.exposed_params = ['frame_rate', 'gain', 'exposure', 'gain_auto']
     
     def _init_format(self):
         frame, _ = self.image()
@@ -43,7 +45,22 @@ class GenericCam:
         '''close cam - release driver'''
         pass
     
-    def apply_settings(self, cam):
+    def _init_settings(self):
+        pass
+        
+    def apply_params(self):
+        pass
+    
+    def set_param(self, param : str, val):
+        param = param.lower()
+        if param in self.exposed_params:
+            self.params[param] = val
+        
+    def get_param(self, param : str):
+        pass
+    
+    def get_features(self):
+        """returns features as formatted string"""
         pass
         
     def _record(self):

@@ -16,6 +16,11 @@ def AVT_get_ids():
     return cam_ids, cam_infos
 
 class AVTCam(GenericCam):
+    """Developed with Mako G030B (works also with prosilica)
+        Note that camera features (such as ExposureTimeAbs)
+        are susceptible to be differently named in other AVT cameras.
+        Should such a thing happen, make this class more abstract and inherit it.
+    """
     def __init__(self, cam_id = None, params = None, format = None):
         
         if cam_id is None:
@@ -30,10 +35,10 @@ class AVTCam(GenericCam):
                           'triggerSource': 'Line1', 'triggerMode':'LevelHigh',
                           'triggerSelector': 'FrameStart', 'acquisitionMode': 'Continuous',
                           'nTriggeredFrames': 1000, 
-                          'poll_timeout':1, 'trigger':0}
+                          'poll_timeout':1, 'trigger':0, 'gain_auto': False
+                          }
                           
         self.params = {**default_params, **self.params}
-        self.params['exposure time'] = self.params.pop('exposure')
 
         default_format = {'dtype': np.uint8}
         self.format = {**default_format, **self.format}
@@ -56,42 +61,74 @@ class AVTCam(GenericCam):
         self.vimba.__enter__()
         self.cam_handle = self.vimba.get_camera_by_id(self.cam_id)
         self.cam_handle.__enter__()
-        self.apply_settings()
+        if 'settings_file' in self.params:
+            self._init_settings()
+        self.apply_params()
         self._record()
         self._init_format()
         return self
+
+    def _init_settings(self):
+        self.cam_handle.load_settings(self.params['settings_file'], PersistType.All)
         
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self.cam_handle.__exit__(exc_type, exc_value, exc_traceback)
         self.vimba.__exit__(exc_type, exc_value, exc_traceback)
         return True
         
-    def apply_settings(self):
-        self.cam_handle.EventNotification = 'On'
+    def apply_params(self):
+        self.cam_handle.EventNotification.set('On')
         self.cam_handle.set_pixel_format(PixelFormat.Mono8)
-        self.cam_handle.AcquisitionFrameRateAbs = self.params['frame_rate']
-        self.cam_handle.GainRaw = self.params['gain']
-        self.cam_handle.ExposureTimeAbs =  self.params['exposure time']
-        self.cam_handle.SyncOutSelector = 'SyncOut1'
-        self.cam_handle.SyncOutSource = 'FrameReadout'#'Exposing'
+        self.cam_handle.SyncOutSelector.set('SyncOut1')
+        self.cam_handle.SyncOutSource.set('FrameReadout')#'Exposing'
         
-        self.cam_handle.TriggerSource = self.params['triggerSource'] if self.triggered else 'FixedRate'
-        self.cam_handle.TriggerMode = 'On' if self.triggered else 'Off'
-        self.cam_handle.AcquisitionMode = self.params['acquisitionMode'] if self.triggered else 'Continuous'
-        self.cam_handle.TriggerSelector = self.params['triggerSelector'] if self.triggered else 'FrameStart'
+        self.cam_handle.AcquisitionFrameRateAbs.set(self.params['frame_rate'])
+        self.cam_handle.Gain.set(self.params['gain'])
+        self.cam_handle.GainAuto.set('Once' if self.params['gain_auto'] else 'Off')
+        
+        self.cam_handle.ExposureTimeAbs.set(self.params['exposure'])
+        
+        self.cam_handle.TriggerMode.set('On' if self.triggered else 'Off')
+        self.cam_handle.TriggerSelector.set(self.params['triggerSelector'] if self.triggered else 'FrameStart')
+        self.cam_handle.TriggerSource.set(self.params['triggerSource'] if self.triggered else 'FixedRate')
+        
+        self.cam_handle.AcquisitionMode.set(self.params['acquisitionMode'] if self.triggered else 'Continuous')
+        self.cam_handle.ExposureMode.set('Timed')
         
         if self.triggered:
-            self.cam_handle.TriggerActivation = self.params['triggerMode']
-            if self.acquisitionMode == 'MultiFrame':
-                self.cam_handle.AcquisitionFrameCount = self.params['nTriggeredFrames']
+            self.cam_handle.TriggerActivation.set(self.params['triggerMode'])
+            if self.params['acquisitionMode'] == 'MultiFrame':
+                self.cam_handle.AcquisitionFrameCount.set(self.params['nTriggeredFrames'])
         else:
             display(f'[{self.name} {self.cam_id}] Using no trigger.')
-        # display(f'AVT - configuration: {self.cam_handle.get_all_features()}')
-        
+
+    def get_features(self):
+        features_str = ""
+        features = self.cam_handle.get_all_features()
+        for feature in features:
+            try:
+                value = feature.get()
+            except (AttributeError, VimbaFeatureError):
+                value = None
+            features_str += '--- Feature name   : {}\n'.format(feature.get_name()) +\
+                            '/// Display name   : {}\n'.format(feature.get_display_name()) +\
+                            '/// Tooltip        : {}\n'.format(feature.get_tooltip()) +\
+                            '/// Description    : {}\n'.format(feature.get_description()) +\
+                            '/// SFNC Namespace : {}\n'.format(feature.get_sfnc_namespace()) +\
+                            '/// Unit           : {}\n'.format(feature.get_unit()) +\
+                            '/// Value          : {}\n\n'.format(str(value))
+        return features_str
+
     def _record(self):
+        self.cam_handle.AcquisitionStart.run()
+        while not self.cam_handle.AcquisitionStart.is_done():
+            time.sleep(0.01)
         self.frame_generator = self.cam_handle.get_frame_generator()
         
     def stop(self):
+        self.cam_handle.AcquisitionStop.run()
+        while not self.cam_handle.AcquisitionStop.is_done():
+            time.sleep(0.01)
         pass
         
     def image(self):
