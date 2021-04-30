@@ -3,7 +3,8 @@ import queue
 import numpy as np
 import ctypes
 import time
-from os.path import dirname
+import datetime
+from os.path import dirname, join
 from cams.avt_cam import AVTCam
 from cams.pco_cam import PCOCam
 from file_writer import BinaryWriter, TiffWriter, FFMPEGWriter, OpenCVWriter
@@ -37,8 +38,9 @@ class CameraHandler(Process):
         self.cam_param_get_flag = Event()
         
         self.img = None
-        self.save_folder = Array('u',' ' * 1024)
-        self.set_save_folder("Loading...")
+        self.folder_path_array = Array('u',' ' * 1024) #can set folder
+        self.filepath_array = Array('u',' ' * 1024) #filepath is readonly
+        self.run_number = 0 
         
         self.lastframeid = -1
         self.lasttime = 0
@@ -83,7 +85,6 @@ class CameraHandler(Process):
             self.cam = cam
             with self._open_writer() as writer:
                 self.writer = writer
-                self._update_save_folder(self.writer.get_folder_as_string())
                 while not self.close_event.is_set():
                     self._process_queues()
                     self.init_run()
@@ -91,7 +92,8 @@ class CameraHandler(Process):
                     self.wait_for_trigger()
                     if self.start_trigger.is_set():
                         display(f'[{cam.name} {cam.cam_id}] start trigger set.')
-                    
+                        if self.saving.is_set():
+                            display(f'[{cam.name} {cam.cam_id}] filepath: {self.get_filepath()}')
                     while not self.stop_trigger.is_set():
                         self._process_queues()
                         frame, metadata = cam.image()
@@ -102,26 +104,42 @@ class CameraHandler(Process):
                     self.close_run()
     
     def _open_writer(self):
-        writer_dict_copy = self.writer_dict.copy()
-        writer_type = writer_dict_copy.pop('recorder', 'opencv')
+        writer_type = self.writer_dict.get('recorder', 'opencv')
         writers = {'opencv': OpenCVWriter, 'binary': BinaryWriter, 'tiff': TiffWriter, 'ffmpeg': FFMPEGWriter} 
         writer = writers[writer_type]
-        std_keys = ['folder', 'dataname', 'datafolder', 'pathformat', 'frames_per_file'] 
-        dict = {key: writer_dict_copy[key] for key in writer_dict_copy if key in std_keys}
+        std_keys = ['frames_per_file'] #might be more later again
+        dict = {key: self.writer_dict[key] for key in self.writer_dict if key in std_keys}
+        folder = join(self.writer_dict['data_folder'], self.cam_dict['description'], self.writer_dict['experiment_folder'])
+        self.set_folder_path(folder)
+        dict['filepath'] = self.get_new_filepath()
         dict['frame_rate'] = self.cam.params.get('frame_rate', None)
         return writer(**dict)
     
-    def get_save_folder(self):
-        return str(self.save_folder[:]).strip(' ')
+    def get_filepath(self):
+        return str(self.filepath_array[:]).strip(' ')
     
-    def _update_save_folder(self, folder):
-        for i in range(len(self.save_folder)):
-            self.save_folder[i] = ' '
-        for i in range(len(folder)):
-            self.save_folder[i] = folder[i]
+    def _update_filepath_array(self, filepath):
+        for i in range(len(self.filepath_array)):
+            self.filepath_array[i] = ' '
+        for i in range(len(filepath)):
+            self.filepath_array[i] = filepath[i]
+            
+    def get_folder_path(self):
+        return str(self.folder_path_array[:]).strip(' ')
         
-    def set_save_folder(self,folder):
-        self._update_save_folder(folder)
+    def set_folder_path(self, folder_path):
+        for i in range(len(self.folder_path_array)):
+            self.folder_path_array[i] = ' '
+        for i in range(len(folder_path)):
+            self.folder_path_array[i] = folder_path[i]
+    
+    def get_new_filename(self):
+        return datetime.date.today().strftime('%y%m%d') + '_' + f"{self.run_number}"
+    
+    def get_new_filepath(self):
+        filepath = join(self.get_folder_path(), self.get_new_filename())
+        self._update_filepath_array(filepath)
+        return filepath
         
     def _open_cam(self):
         cam_dict_copy = self.cam_dict.copy()
@@ -137,12 +155,13 @@ class CameraHandler(Process):
     def init_run(self):
         self.nframes.value = 0
         self.lastframeid = -1
-        if self.get_save_folder() != self.writer.get_folder_as_string():
-            self.writer.set_folder(self.save_folder)
+        self.writer.set_filepath(self.get_new_filepath())
         self.camera_ready.set()
     
     def close_run(self):
         self.start_trigger.clear()
+        if self.saving.is_set():
+            self.run_number += 1
         if not self.close_event.is_set():
             self.stop_trigger.clear()
         self.is_running.clear()

@@ -2,8 +2,7 @@
 import time
 import sys
 import os
-from os import path
-from os.path import join as pjoin
+from os.path import join, isfile, dirname
 from multiprocessing import Process,Queue,Event,Array,Value
 import queue
 from datetime import datetime
@@ -15,41 +14,38 @@ from utils import display
 
 VERSION = 'B0.6'
 
-class RunWriter(Process):
+class FileWriter(Process):
+    """Abstract class to write to file(s)
+    Runs in a separate process
+    Takes a filepath, an extension and an optional frames_per_file (default is unlimited)
+    Final format is: 
+    {filepath}.extension if that file not already present
+    otherwise {filepath}_i.extension where i is the first index available in the folder (does not overwrite)
+    """
     sleeptime = 0.05
     queue_timeout = 0.05
     
-    def __init__(self, folder = 'dummy',
-                       dataname = 'eyecam',
-                       datafolder= pjoin(os.path.expanduser('~'),'data'),
-                       pathformat = pjoin('{datafolder}','{dataname}','{folder}','{today}_{run}_{nfiles}'),
-                       extension = 'log',
+    def __init__(self, filepath,
+                       extension = "log",
                        frames_per_file = 0):
         super().__init__()
+        self.filepath_array = Array('u',' ' * 1024)
+        self.filepath = filepath
         
-        self.folder = folder
-        self.folder_array = Array('u',' ' * 1024)
-        
-        self.path_format = pathformat
-        today = datetime.today().strftime('%Y%m%d')
-        self.path_dict = {'datafolder':datafolder,'dataname':dataname,'folder': folder, 'today': today, 'extension': extension}
+        self.extension = extension
         
         self.frames_per_file = frames_per_file
 
-        self.close_flag = Event()
-        self.stop_flag = Event()
         self.start_flag = Event()
+        self.stop_flag  = Event()
+        self.close_flag = Event()
         
         self.inQ = Queue()
 
         self.file_handler = None
-        self.n_run = 0
-        self.n_frames = 0
-        self.n_files = 0
-        
         self.start()
-        self.start_flag.wait(2) #do not return handle before process started
-        
+        self.start_flag.wait() #do not return handle before process started
+
     def __enter__(self):
         return self
         
@@ -57,40 +53,48 @@ class RunWriter(Process):
         self.close()
         self.join()
     
-    def set_folder(self,folder):
+    def get_filepath(self):
+        """To access filepath outside of process
+        """
+        return str(self.filepath_array[:]).strip(' ')
+        
+    def set_filepath(self, filepath):
         if self.start_flag.is_set():
             self.stop_flag.set()
-        for i in range(len(self.folder_array)):
-            self.folder_array[i] = ' '
-        for i in range(len(folder)):
-            self.folder_array[i] = folder[i]
-        display('Folder updated: ' + self.get_folder_path())
-        
-    def get_folder_as_string(self):
-        return str(self.folder_array[:]).strip(' ')
+        filepath = self.get_complete_filepath(filepath)
+        self.update_filepath_array(filepath)
+        self.file_handler = None
     
-    def get_folder_path(self):
-        return os.path.dirname(self.get_filepath())
-        
-    def get_filepath(self):
-        self.path_dict['run'] = 'run{0:03d}'.format(self.n_run)
-        self.path_dict['nfiles'] = '{0:08d}'.format(self.n_files)
-        self.path_dict['folder'] = self.get_folder_as_string()
-        filepath = (self.path_format + '.{extension}').format(**self.path_dict)
-        return filepath
+    def get_complete_filepath(self, filepath):
+        """Adds the extension, checks that the filepath is available.
+        If not, checks the next available filepath:
+            filepath.extension if that file not already present
+            otherwise filepath_i.extension where i is the first index available in the folder (does not overwrite)
+        """
+        i = 1
+        complete_filepath = f"{filepath}_{i}.{self.extension}"
+        while isfile(complete_filepath):
+            i += 1
+            complete_filepath = f"{filepath}_{i}.{self.extension}"
+        return complete_filepath
+                                                               
+    def update_filepath_array(self, filepath):
+        for i in range(len(self.filepath_array)):
+            self.filepath_array[i] = ' '
+        for i in range(len(filepath)):
+            self.filepath_array[i] = filepath[i]
 
     def _init_file_handler(self, frame):
         """open file generic"""
-        filepath = self.get_filepath()
-        folder = os.path.dirname(filepath)
+        self.filepath = self.get_filepath()
+        folder = dirname(self.filepath)
         if not os.path.exists(folder):
             try:
                 os.makedirs(folder)
             except Exception as e:
                 print(f"Could not create folder {folder} : {e}")
         self._release_file_handler()
-        self.file_handler = self._get_file_handler(filepath,frame)
-        self.n_files += 1
+        self.file_handler = self._get_file_handler(self.filepath,frame)
         
     def _get_file_handler(self, filepath, frame):
         """get specific file handler"""
@@ -113,11 +117,10 @@ class RunWriter(Process):
             print("ERROR: could not save image, queue is full")
     
     def run(self):
-        self.set_folder(self.folder)
+        self.set_filepath(self.filepath)
         self.start_flag.set()
         while not self.close_flag.is_set():
             self.saved_frame_count = 0
-            self.n_files = 0
             while not self.stop_flag.is_set():
                 time.sleep(self.sleeptime)
                 self._process_queue()
@@ -125,11 +128,9 @@ class RunWriter(Process):
     
     def _close_run(self):
         self._release_file_handler()
-        self.n_run += 1
-        if not self.saved_frame_count == 0:
-            display("[Writer] Wrote {0} frames on {1} ({2} files).".format(self.saved_frame_count,
-                                                                             self.path_dict['dataname'],
-                                                                             self.n_files))
+        # if not self.saved_frame_count == 0:
+            # display("[Writer] Wrote {0} frames at {1}.".format(self.saved_frame_count,
+                                                               # self.filepath))
         self.stop_flag.clear()
   
     def _process_queue(self):
@@ -158,20 +159,14 @@ class RunWriter(Process):
         self.close_flag.set()
         self.stop_flag.set()
         
-class TiffWriter(RunWriter):
+class TiffWriter(FileWriter):
     def __init__(self,
-                 folder = pjoin('dummy','run'),
-                 dataname = 'cam',
-                 pathformat = pjoin('{datafolder}','{dataname}','{folder}',
-                                    '{today}_{run}_{nfiles}'),
-                 datafolder=pjoin(os.path.expanduser('~'),'data'),
+                 filepath,
                  frames_per_file=256,
                  compression=None):
-        self.extension = '.tif'
-        super().__init__(datafolder=datafolder,
-                         folder=folder,
-                         dataname=dataname,
-                         pathformat=pathformat,
+    
+        super().__init__(filepath,
+                         extension = 'tif',
                          frames_per_file=frames_per_file)
         self.compression = None
         if not compression is None:
@@ -189,21 +184,14 @@ class TiffWriter(RunWriter):
                                compress=self.compression,
                                description='id:{0};timestamp:{1}'.format(frameid,timestamp))
 
-class BinaryWriter(RunWriter):
-    def __init__(self,folder = pjoin('dummy','run'),
-                      dataname = 'eyecam',
-                      datafolder=pjoin(os.path.expanduser('~'),'data'),
-                      pathformat = pjoin('{datafolder}','{dataname}','{folder}',
-                                    '{today}_{run}_{nfiles}'),
-                      frames_per_file = 0,
+class BinaryWriter(FileWriter):
+    def __init__(self, filepath,
+                       frames_per_file = 0,
                        **kwargs):
-                      
-        super().__init__(folder=folder,
-                         datafolder=datafolder,
-                         dataname=dataname,
-                         pathformat = pathformat,
+        print("C2h", flush=True)
+        super().__init__(filepath = filepath + "_{n_chan}_{H}_{W}_{dtype}",
                          frames_per_file=frames_per_file,
-                         extension = '_{n_chan}_{H}_{W}_{dtype}.dat')
+                         extension = 'dat')
         
     def _get_file_handler(self,filepath,frame = None):
         dtype = frame.dtype
@@ -225,23 +213,17 @@ class BinaryWriter(RunWriter):
         if np.mod(frameid,5000) == 0: 
             display('Wrote frame id - {0}'.format(frameid))
         
-class FFMPEGWriter(RunWriter):
-    def __init__(self, folder = pjoin('dummy','run'),
-                       dataname = 'eyecam',
-                       datafolder=pjoin(os.path.expanduser('~'),'data'),
-                       pathformat = pjoin('{datafolder}','{dataname}','{folder}','{today}_{run}_{nfiles}'),
+class FFMPEGWriter(FileWriter):
+    def __init__(self, filepath,
                        frames_per_file=0,
                        hwaccel = None,
                        frame_rate = None,
                        compression=17,
                        **kwargs):
                        
-        super().__init__(folder = folder,
-                         datafolder = datafolder,
-                         dataname = dataname,
-                         pathformat = pathformat,
+        super().__init__(filepath,
                          frames_per_file = frames_per_file,
-                         extension = '.avi')
+                         extension = 'avi')
                          
         self.compression = compression
         if frame_rate is None:
@@ -302,7 +284,7 @@ class FFMPEGWriter(RunWriter):
         
         # does a check for the datatype, if uint16 then save compressed lossless
         if frame.dtype in [np.uint16] and len(frame.shape) == 2:
-            filepath = filepath.replace(self.extension,'.mov')
+            filepath = filepath.rsplit(".",1)[0] + '.mov'
             inputdict={'-pix_fmt':'gray16le',
                       '-r':str(self.frame_rate)} # this is important
             outputdict={'-c:v':'libopenjpeg',
@@ -317,11 +299,8 @@ class FFMPEGWriter(RunWriter):
     def _write(self,frame,frameid,timestamp):
         self.file_handler.writeFrame(frame)
 
-class OpenCVWriter(RunWriter):
-    def __init__(self, folder = pjoin('dummy','run'),
-                       dataname = 'eyecam',
-                       pathformat = pjoin('{datafolder}','{dataname}','{folder}','{today}_{run}_{nfiles}'),
-                       datafolder = pjoin(os.path.expanduser('~'),'data'),
+class OpenCVWriter(FileWriter):
+    def __init__(self, filepath,
                        frames_per_file = 0,
                        fourcc = 'XVID', #'X264'
                        frame_rate = 60,
@@ -331,10 +310,7 @@ class OpenCVWriter(RunWriter):
         self.fourcc = cv2.VideoWriter_fourcc(*fourcc)
         self.w = None
         self.h = None
-        super().__init__(folder = folder,
-                         datafolder=datafolder,
-                         pathformat = pathformat,
-                         dataname=dataname,
+        super().__init__(filepath,
                          extension = 'avi',
                          frames_per_file=frames_per_file)
         

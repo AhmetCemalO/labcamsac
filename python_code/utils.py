@@ -43,7 +43,7 @@ DEFAULT_CAM_INFOS = [{'description':'facecam',
                       'id':0,
                       'driver':'OpenCV'
                       },
-                     {'description':'1photon',
+                     {'description':'1photon-2',
                       'name':'pco.edge',
                       'id':0,
                       'driver':'pco',
@@ -75,10 +75,22 @@ def get_preferences(filepath = None, create_template = True):
     if path.isfile(filepath):
         with open(filepath, 'r') as infile:
             pref = json.load(infile)
-        pref['user_path'] = filepath
+        pref['user_config_path'] = filepath
+        check_preferences(pref)
         return True, pref
     else:
         if create_template:
             write_template_to_file(filepath)
             print('\n\tPlease close the GUI, edit the template, then relaunch.\n', flush=True)
         return False, pref
+
+def check_preferences(pref):
+    cams = pref.get("cams", [])
+    descriptions = []
+    for cam in cams:
+        if "description" in cam:
+            description =  cam["description"]
+            if description in descriptions:
+                print(f"ERROR: descriptions have to be unique in your labcams config file at {pref['user_config_path']}. Those are used to determine the recorder subfolders.", flush = True)
+                sys.exit(0)
+            descriptions.append(description)

@@ -26,7 +26,6 @@ class LabcamsWindow(QMainWindow):
         
         self.cam_handles = []
         for cam in self.preferences.get('cams', []):
-        
             if cam['driver'] in ['avt', 'pco']:
                 self.setup_camera(cam)
         
@@ -78,7 +77,7 @@ class LabcamsWindow(QMainWindow):
         
     def setup_camera(self, cam_dict):
         if 'settings_file' in cam_dict.get('params', {}):
-            cam_dict['params']['settings_file'] = join(dirname(self.preferences['user_path']), 'configs', cam_dict['params']['settings_file'])
+            cam_dict['params']['settings_file'] = join(dirname(self.preferences['user_config_path']), 'configs', cam_dict['params']['settings_file'])
         writer_dict = {**self.preferences.get('recorder_params', {}), **cam_dict.get('recorder_params', {})}
         cam_handler = CameraHandler(cam_dict, writer_dict)
         if cam_handler.camera_connected:
@@ -188,8 +187,8 @@ class CamWidget(QWidget):
         
     def _update(self):
         if self.camHandler is not None:
-            dest = self.camHandler.get_save_folder()
-            self.ui.save_location_label.setText('Folder: ' + dest)
+            dest = self.camHandler.get_filepath()
+            self.ui.save_location_label.setText('Filepath: ' + dest)
             if self.camHandler.is_running.is_set():
                 self._update_img()
             if self.camHandler.start_trigger.is_set() and not self.camHandler.stop_trigger.is_set():
@@ -229,12 +228,14 @@ class CamWidget(QWidget):
             ret = self.camHandler.start_acquisition()
             if ret:
                 self.ui.start_stop_pushButton.setText("Stop")
+                self.ui.record_checkBox.setEnabled(False)
         else:
             print("Could not start cam, camera already running", flush=True)
             
     def _stop_cam(self):
         self.camHandler.stop_acquisition()
         self.ui.start_stop_pushButton.setText("Start")
+        self.ui.record_checkBox.setEnabled(True)
         
     def _record(self, state):
         if state:
