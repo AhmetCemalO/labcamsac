@@ -88,12 +88,37 @@ def get_preferences(filepath = None, create_template = True):
         return False, pref
 
 def check_preferences(pref): #TODO check for required fields
+    error_messages = ""
+    
+    def check_missing_keys(dict, required_keys):
+        missing_keys = []
+        for key in required_keys:
+            if not key in dict:
+                missing_keys.append(key)
+        return missing_keys
+                
     cams = pref.get("cams", [])
+    required_cam_keys = ['description', 'driver']
     descriptions = []
     for cam in cams:
         if "description" in cam:
             description =  cam["description"]
             if description in descriptions:
-                print(f"ERROR: descriptions have to be unique in your labcams config file at {pref['user_config_path']}. Those are used to determine the recorder subfolders.", flush = True)
-                sys.exit(0)
+                error_messages += f"ERROR: descriptions have to be unique in your labcams config file at {pref['user_config_path']}. Those are used to determine the recorder subfolders.\n"
             descriptions.append(description)
+        missing_keys = check_missing_keys(cam, required_cam_keys)
+        if len(missing_keys) > 0:
+            error_messages += f"ERROR: the following required keys are missing from your cam entry: {''.join(missing_keys)}.\n"
+    
+    required_recorder_keys = ['data_folder', 'experiment_folder']
+    if not "recorder_params" in pref:
+        error_messages += f"ERROR: there needs to be a recorder_params entry, with at least the following required keys: {''.join(required_recorder_keys)}.\n"
+    else:
+        missing_keys = check_missing_keys(pref["recorder_params"], required_recorder_keys)
+        if len(missing_keys) > 0:
+            error_messages += f"ERROR: the following required keys are missing from your recorder_params entry: {''.join(missing_keys)}.\n"
+    
+    if len(error_messages) > 0:
+        print(error_messages, flush=True)
+        sys.exit(0)
+    
