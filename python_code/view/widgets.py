@@ -1,4 +1,5 @@
 import sys
+from os import getcwd
 from os import path
 from os.path import join, dirname
 import numpy as np
@@ -77,7 +78,7 @@ class LabcamsWindow(QMainWindow):
         
     def setup_camera(self, cam_dict):
         if 'settings_file' in cam_dict.get('params', {}):
-            cam_dict['params']['settings_file'] = join(dirname(self.preferences['user_config_path']), 'configs', cam_dict['params']['settings_file'])
+            cam_dict['params']['settings_file'] = join(dirname(getcwd()), 'configs', cam_dict['params']['settings_file'])
         writer_dict = {**self.preferences.get('recorder_params', {}), **cam_dict.get('recorder_params', {})}
         cam_handler = CameraHandler(cam_dict, writer_dict)
         if cam_handler.camera_connected:

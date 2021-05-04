@@ -99,8 +99,8 @@ class AVTCam(GenericCam):
             self.cam_handle.TriggerActivation.set(self.params['triggerMode'])
             if self.params['acquisitionMode'] == 'MultiFrame':
                 self.cam_handle.AcquisitionFrameCount.set(self.params['nTriggeredFrames'])
-        else:
-            display(f'[{self.name} {self.cam_id}] Using no trigger.')
+            display(f'[{self.name} {self.cam_id}] Using network trigger.')
+            
 
     def get_features(self):
         features_str = ""
