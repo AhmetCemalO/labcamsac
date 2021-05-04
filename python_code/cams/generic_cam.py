@@ -21,15 +21,15 @@ class GenericCam:
         self.format = format if format is not None else {}
         
         self.triggered = False
-        self.is_acquiring = False
+        self.is_recording = False
         
-        self.exposed_params = ['frame_rate', 'gain', 'exposure', 'gain_auto']
+        self.exposed_params = []
     
     def _init_format(self):
         frame, _ = self.image()
         self.format['height'] = frame.shape[0]
         self.format['width'] = frame.shape[1]
-        self.format['n_chan'] = frame.shape[2]
+        self.format['n_chan'] = frame.shape[2] if frame.ndim == 3 else 1
         display(f"{self.name} - size: {self.format['height']} x {self.format['width']}")
     
     def is_connected(self):
@@ -43,9 +43,6 @@ class GenericCam:
 
     def close(self):
         '''close cam - release driver'''
-        pass
-    
-    def _init_settings(self):
         pass
         
     def apply_params(self):

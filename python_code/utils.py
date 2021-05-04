@@ -8,20 +8,22 @@ def display(msg):
     sys.stdout.write('['+datetime.today().strftime('%y-%m-%d %H:%M:%S')+'] - ' + msg + '\n')
     sys.stdout.flush()
 
-DEFAULT_SERVER_PARAMS = {'server': 'udp',
-                    'server_refresh_time':30, #ms
-                    'server_port':9999}
+DEFAULT_SERVER_PARAMS = {
+                         'server': 'udp',
+                         'server_refresh_time':30, #ms
+                         'server_port':9999
+                         }
                       
-DEFAULT_RECORDER_PARAMS = {'recorder_path': 'I:\\data',
-                             'recorder_frames_per_file': 256, # 0 is for a single large file
-                             'recorder_sleep_time': 0.05,
-                             'recorder_path_format': path.join('{datafolder}',
-                                                           '{dataname}',
-                                                           '{filepath}',
-                                                           '{today}_{run}_{nfiles}'),
-                             'compress': 0}
+DEFAULT_RECORDER_PARAMS = {
+                            'recorder' : 'opencv',
+                            'data_folder': 'C:\\Users\\User\\data',
+                            'experiment_folder': 'EXP_TEST',
+                            'frames_per_file': 256,
+                            'compress': 0
+                          }
 
-DEFAULT_CAM_INFOS = [{'description':'facecam',
+DEFAULT_CAM_INFOS = [
+                     {'description':'facecam',
                       'name':'Mako G-030B',
                       'driver':'avt',
                       'params': {'gain':10,
@@ -49,7 +51,8 @@ DEFAULT_CAM_INFOS = [{'description':'facecam',
                       'driver':'pco',
                       'params': {'triggerType':0,
                                  'exposure':33},
-                      'recorder_params': {'recorder' : 'binary'}}]
+                      'recorder_params': {'recorder' : 'binary'}}
+                      ]
 
 def get_default_folder():
     return path.join(path.expanduser('~'), 'labcams')
@@ -84,7 +87,7 @@ def get_preferences(filepath = None, create_template = True):
             print('\n\tPlease close the GUI, edit the template, then relaunch.\n', flush=True)
         return False, pref
 
-def check_preferences(pref):
+def check_preferences(pref): #TODO check for required fields
     cams = pref.get("cams", [])
     descriptions = []
     for cam in cams:

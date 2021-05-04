@@ -322,13 +322,11 @@ class OpenCVWriter(FileWriter):
     def _get_file_handler(self,filepath,frame = None):
         self.w = frame.shape[1]
         self.h = frame.shape[0]
-        self.isColor = False
-        if len(frame.shape) < 2:
-            self.isColor = True
+        is_color = frame.shape[2] == 3 if frame.ndim == 3 else False
         display('Opening: '+ filepath)
-        return cv2.VideoWriter(filepath, self.fourcc, self.frame_rate,(self.w,self.h))
+        return cv2.VideoWriter(filepath, self.fourcc, self.frame_rate,(self.w,self.h), is_color)
                                   
     def _write(self,frame,frameid,timestamp):
-        if len(frame.shape) < 2 or frame.shape[2] == 1:
-            frame = cv2.cvtColor(frame,cv2.COLOR_GRAY2RGB)
+        # if frame.ndim < 3 or frame.shape[2] == 1:
+            # frame = cv2.cvtColor(frame,cv2.COLOR_GRAY2RGB)
         self.file_handler.write(frame)

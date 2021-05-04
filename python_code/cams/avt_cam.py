@@ -38,6 +38,8 @@ class AVTCam(GenericCam):
                           'poll_timeout':1, 'trigger':0, 'gain_auto': False
                           }
                           
+        self.exposed_params = ['frame_rate', 'gain', 'exposure', 'gain_auto']
+        
         self.params = {**default_params, **self.params}
 
         default_format = {'dtype': np.uint8}
@@ -62,14 +64,12 @@ class AVTCam(GenericCam):
         self.cam_handle = self.vimba.get_camera_by_id(self.cam_id)
         self.cam_handle.__enter__()
         if 'settings_file' in self.params:
-            self._init_settings()
+            self.cam_handle.load_settings(self.params['settings_file'], PersistType.All)
         self.apply_params()
         self._record()
         self._init_format()
         return self
-
-    def _init_settings(self):
-        self.cam_handle.load_settings(self.params['settings_file'], PersistType.All)
+        
         
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self.cam_handle.__exit__(exc_type, exc_value, exc_traceback)

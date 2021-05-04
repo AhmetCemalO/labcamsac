@@ -88,6 +88,7 @@ class CameraHandler(Process):
                 while not self.close_event.is_set():
                     self._process_queues()
                     self.init_run()
+                    
                     display(f'[{cam.name} {cam.cam_id}] waiting for trigger.')
                     self.wait_for_trigger()
                     if self.start_trigger.is_set():
@@ -203,7 +204,7 @@ class CameraHandler(Process):
                 if param[0] == 'get':
                     try:
                         clear_queue(self.cam_param_OutQ)
-                        self.cam_param_OutQ.put_nowait(self.cam.params)
+                        self.cam_param_OutQ.put_nowait({k:self.cam.params[k] for k in self.cam.params if k in self.cam.exposed_params})
                     except queue.Full:
                         pass
                     self.cam_param_get_flag.set()

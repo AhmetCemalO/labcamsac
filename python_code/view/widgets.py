@@ -267,7 +267,8 @@ class CamSettingsWidget(QWidget):
         
         self.settings = {'frame_rate': self.ui.framerate_lineEdit,
                          'exposure': self.ui.exposure_lineEdit,
-                         'gain': self.ui.gain_lineEdit}
+                         'gain': self.ui.gain_lineEdit,
+                         'gain_auto' : self.ui.autogain_checkBox}
     
     def _autogain(self, state):
         self.ui.gain_lineEdit.setEnabled(not state)
@@ -286,4 +287,10 @@ class CamSettingsWidget(QWidget):
         params = self.camHandler.get_cam_params()
         if params is not None:
             for setting in self.settings:
-                self.settings[setting].setText(str(params[setting]))
+                is_setting_available = setting in params
+                self.settings[setting].setEnabled(is_setting_available)
+                self.settings[setting].setText(str(params[setting]) if is_setting_available else "")
+                
+                
+                
+                
