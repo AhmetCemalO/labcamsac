@@ -5,25 +5,27 @@ from os.path import join, dirname
 import numpy as np
 import cv2
 import time
+from functools import lru_cache
+from PyQt5 import uic
 from PyQt5.QtGui import QImage, QPixmap, QIcon
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow, QAction, QLineEdit
 from PyQt5.QtCore import Qt, QTimer
 
 from udp_socket import UDPSocket
-from view.UI_pycams import Ui_PyCams
-from view.UI_cam import Ui_Cam
-from view.UI_cam_settings import Ui_Settings
 from utils import display
 from camera_handler import CameraHandler
+
+dirpath = dirname(path.realpath(__file__))
 
 class PyCamsWindow(QMainWindow):
     def __init__(self, preferences = None):
         self.preferences = preferences if preferences is not None else {}
         
         super().__init__()
-        self.ui = Ui_PyCams()
-        self.ui.setupUi(self)
-        self.setWindowIcon(QIcon(path.dirname(path.realpath(__file__)) + '/icon/pycams.png'))
+        
+        uic.loadUi(join(dirpath, 'UI_pycams.ui'), self)
+        
+        self.setWindowIcon(QIcon(dirpath + '/icon/pycams.png'))
         
         self.cam_widgets = []
         for cam in self.preferences.get('cams', []):
@@ -39,9 +41,9 @@ class PyCamsWindow(QMainWindow):
                 self._timer.timeout.connect(self.process_server_messages)
                 self._timer.start(server_params.get('server_refresh_time', 100))
         
-        self.ui.mdiArea.setActivationOrder(1)
+        self.mdiArea.setActivationOrder(1)
         
-        self.ui.menuView.triggered[QAction].connect(self.viewMenuActions)
+        self.menuView.triggered[QAction].connect(self.viewMenuActions)
         
         self.show()
     
@@ -98,9 +100,9 @@ class PyCamsWindow(QMainWindow):
         :param widget: Widget
         :type widget: QWidget
         """
-        active_subwindows = [e.objectName() for e in self.ui.mdiArea.subWindowList()]
+        active_subwindows = [e.objectName() for e in self.mdiArea.subWindowList()]
         if name not in active_subwindows:
-            subwindow = QMdiSubWindow(self.ui.mdiArea)
+            subwindow = QMdiSubWindow(self.mdiArea)
             subwindow.setWindowTitle(name)
             subwindow.setObjectName(name)
             subwindow.setWidget(widget)
@@ -118,15 +120,15 @@ class PyCamsWindow(QMainWindow):
         :type q: QAction
         """
         if q.text() == 'Subwindow View':
-            self.ui.mdiArea.setViewMode(0)
+            self.mdiArea.setViewMode(0)
         if q.text() == 'Tabbed View':
-            self.ui.mdiArea.setViewMode(1)
+            self.mdiArea.setViewMode(1)
         elif q.text() == 'Cascade View':
-            self.ui.mdiArea.setViewMode(0)
-            self.ui.mdiArea.cascadeSubWindows()
+            self.mdiArea.setViewMode(0)
+            self.mdiArea.cascadeSubWindows()
         elif q.text() == 'Tile View':
-            self.ui.mdiArea.setViewMode(0)
-            self.ui.mdiArea.tileSubWindows()
+            self.mdiArea.setViewMode(0)
+            self.mdiArea.tileSubWindows()
     
     def closeEvent(self, event):
         """
@@ -149,7 +151,7 @@ class PyCamsWindow(QMainWindow):
         for cam_widget in self.cam_widgets:
             cam_widget.cam_handler.close()
         time.sleep(0.5)
-        display("Pycams out, bye!")
+        display("PyCams out, bye!")
         QApplication.quit()
         sys.exit()
 
@@ -166,13 +168,12 @@ def nparray_to_qimg(img):
 class CamWidget(QWidget):
     def __init__(self, cam_handler = None):
         super().__init__()
-        self.ui = Ui_Cam()
-        self.ui.setupUi(self)
+        uic.loadUi(join(dirpath, 'UI_cam.ui'), self)
         
         self.cam_handler = cam_handler
         
         self._init_trigger_checkbox()
-        self.is_triggered = self.ui.trigger_checkBox.isChecked()
+        self.is_triggered = self.trigger_checkBox.isChecked()
         
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._update)
@@ -180,18 +181,21 @@ class CamWidget(QWidget):
         
         self.AR_policy = Qt.KeepAspectRatio
         
-        self.ui.start_stop_pushButton.clicked.connect(self._start_stop)
-        self.ui.record_checkBox.stateChanged.connect(self._record)
-        self.ui.trigger_checkBox.stateChanged.connect(self._trigger)
-        self.ui.keep_AR_checkBox.stateChanged.connect(self._pixmap_aspect_ratio)
+        self.start_stop_pushButton.clicked.connect(self._start_stop)
+        self.record_checkBox.stateChanged.connect(self._record)
+        self.trigger_checkBox.stateChanged.connect(self._trigger)
+        self.keep_AR_checkBox.stateChanged.connect(self._pixmap_aspect_ratio)
         
-        self.settings = CamSettingsWidget(self.cam_handler)
-        self.ui.settings_pushButton.clicked.connect(self._toggle_settings)
+        self.cam_settings = CamSettingsWidget(self.cam_handler)
+        self.camera_settings_pushButton.clicked.connect(self._toggle_cam_settings)
+        
+        self.display_settings = DisplaySettingsWidget()
+        self.display_settings_pushButton.clicked.connect(self._toggle_display_settings)
     
     def _update(self):
         if self.cam_handler is not None:
             dest = self.cam_handler.get_filepath()
-            self.ui.save_location_label.setText('Filepath: ' + dest)
+            self.save_location_label.setText('Filepath: ' + dest)
             if self.cam_handler.is_running.is_set():
                 self._update_img()
             if self.cam_handler.start_trigger.is_set() and not self.cam_handler.stop_trigger.is_set():
@@ -203,9 +207,11 @@ class CamWidget(QWidget):
     def _update_img(self):
         img = np.copy(self.cam_handler.get_image())
         if img is not None:
+            if self.display_settings.isVisible():
+                img = self.display_settings.process_img(img)
             pixmap = QPixmap(nparray_to_qimg(img))
-            pixmap = pixmap.scaled(self.ui.img_label.width(), self.ui.img_label.height(), self.AR_policy, Qt.FastTransformation)
-            self.ui.img_label.setPixmap(pixmap)
+            pixmap = pixmap.scaled(self.img_label.width(), self.img_label.height(), self.AR_policy, Qt.FastTransformation)
+            self.img_label.setPixmap(pixmap)
     
     def _pixmap_aspect_ratio(self, state):
         if state:
@@ -214,14 +220,14 @@ class CamWidget(QWidget):
             self.AR_policy = Qt.IgnoreAspectRatio
             
     def resizeEvent(self, event):
-        pixmap = self.ui.img_label.pixmap()
+        pixmap = self.img_label.pixmap()
         if pixmap is not None:
-            self.ui.img_label.setMinimumSize(1,1)
-            pixmap = pixmap.scaled(self.ui.img_label.width(), self.ui.img_label.height(), self.AR_policy, Qt.FastTransformation)
-            self.ui.img_label.setPixmap(pixmap)
+            self.img_label.setMinimumSize(1,1)
+            pixmap = pixmap.scaled(self.img_label.width(), self.img_label.height(), self.AR_policy, Qt.FastTransformation)
+            self.img_label.setPixmap(pixmap)
 
     def _start_stop(self):
-        if self.ui.start_stop_pushButton.text() == "Start":
+        if self.start_stop_pushButton.text() == "Start":
             self.start_cam()
         else:
             self.stop_cam()
@@ -239,14 +245,14 @@ class CamWidget(QWidget):
         self._set_start_text()
     
     def _set_start_text(self):
-        self.ui.start_stop_pushButton.setText("Start")
-        self.ui.record_checkBox.setEnabled(True)
-        self.ui.trigger_checkBox.setEnabled(True)
+        self.start_stop_pushButton.setText("Start")
+        self.record_checkBox.setEnabled(True)
+        self.trigger_checkBox.setEnabled(True)
         
     def _set_stop_text(self):
-        self.ui.start_stop_pushButton.setText("Stop")
-        self.ui.record_checkBox.setEnabled(False)
-        self.ui.trigger_checkBox.setEnabled(False)
+        self.start_stop_pushButton.setText("Stop")
+        self.record_checkBox.setEnabled(False)
+        self.trigger_checkBox.setEnabled(False)
         
     def _record(self, state):
         if state:
@@ -262,46 +268,50 @@ class CamWidget(QWidget):
         if params is not None:
             is_setting_available = 'triggered' in params
             if is_setting_available:
-                self.ui.trigger_checkBox.setChecked(params['triggered'])
+                self.trigger_checkBox.setChecked(params['triggered'])
             else:
-                self.ui.trigger_checkBox.setEnabled(False)
+                self.trigger_checkBox.setEnabled(False)
                 
     def _trigger(self, state):
         self.is_triggered = state
         self.cam_handler.set_cam_param('triggered', state)
         
-    def _toggle_settings(self):
-        is_visible = self.settings.isVisible()
-        self.settings.setVisible(not is_visible)
+    def _toggle_cam_settings(self):
+        is_visible = self.cam_settings.isVisible()
+        self.cam_settings.setVisible(not is_visible)
         if not is_visible:
-            self.settings.init_fields()
+            self.cam_settings.init_fields()
+            
+    def _toggle_display_settings(self):
+        is_visible = self.display_settings.isVisible()
+        self.display_settings.setVisible(not is_visible)
 
 class CamSettingsWidget(QWidget):
     def __init__(self, cam_handler = None):
         super().__init__()
-        self.ui = Ui_Settings()
-        self.ui.setupUi(self)
+        
+        uic.loadUi(join(dirpath, 'UI_cam_settings.ui'), self)
         
         self.cam_handler = cam_handler
         
-        self.ui.apply_pushButton.clicked.connect(self._apply_settings)
-        self.ui.autogain_checkBox.stateChanged.connect(self._autogain)
-        self._autogain(self.ui.autogain_checkBox.isChecked())
+        self.apply_pushButton.clicked.connect(self._apply_settings)
+        self.autogain_checkBox.stateChanged.connect(self._autogain)
+        self._autogain(self.autogain_checkBox.isChecked())
         
-        self.settings = {'frame_rate': self.ui.framerate_lineEdit,
-                         'exposure': self.ui.exposure_lineEdit,
-                         'gain': self.ui.gain_lineEdit,
-                         'gain_auto' : self.ui.autogain_checkBox}
+        self.settings = {'frame_rate': self.framerate_lineEdit,
+                         'exposure': self.exposure_lineEdit,
+                         'gain': self.gain_lineEdit,
+                         'gain_auto' : self.autogain_checkBox}
     
     def _autogain(self, state):
-        self.ui.gain_lineEdit.setEnabled(not state)
+        self.gain_lineEdit.setEnabled(not state)
             
     def _apply_settings(self):
         for setting in self.settings:
             val = self.settings[setting].text()
             if val.isdigit():
                 self.cam_handler.set_cam_param(setting, int(val))
-        self.cam_handler.set_cam_param('gain_auto', self.ui.autogain_checkBox.isChecked())
+        self.cam_handler.set_cam_param('gain_auto', self.autogain_checkBox.isChecked())
         
     def init_fields(self):
         self.cam_handler.query_cam_params()
@@ -314,7 +324,67 @@ class CamSettingsWidget(QWidget):
                 self.settings[setting].setEnabled(is_setting_available)
                 if isinstance(self.settings[setting], QLineEdit):
                     self.settings[setting].setText(str(params[setting]) if is_setting_available else "")
-                
-                
-                
-                
+
+
+@lru_cache(maxsize=1)
+def get_image_depth(dtype):
+    img_depth = 0
+    if dtype == np.uint8:
+        img_depth = 255
+    elif dtype == np.uint16:
+        img_depth = 65_535
+    else:
+        img_depth = 20_000
+    return img_depth
+
+def stretch_histogram(img, lower_thresh, upper_thresh):
+    img_depth = get_image_depth(img.dtype)
+    r = img_depth/(upper_thresh-lower_thresh+2) # unit of stretching
+    out = np.round(r*(img-lower_thresh+1)).astype(img.dtype) # stretched values
+    out[img < lower_thresh] = 0
+    out[img > upper_thresh] = img_depth
+    return out
+        
+class DisplaySettingsWidget(QWidget):
+    #https://www.mfitzp.com/tutorials/embed-pyqtgraph-custom-widgets-qt-app/
+    def __init__(self):
+        super().__init__()
+        
+        uic.loadUi(join(dirpath, 'UI_display_settings.ui'), self)
+        
+        self.graphWidget.showAxis('left', False)
+
+        self.minimum_percent = 0
+        self.maximum_percent = 100
+        
+        self.min_horizontalSlider.valueChanged.connect(self.set_minimum)
+        self.max_horizontalSlider.valueChanged.connect(self.set_maximum)
+        
+        self.reset_pushButton.clicked.connect(self.reset)
+
+    def set_minimum(self, val):
+        self.minimum_percent = val
+
+    def set_maximum(self, val):
+        self.maximum_percent = val
+    
+    def reset(self):
+        self.minimum_percent = 0
+        self.maximum_percent = 100
+        self.min_horizontalSlider.setValue(self.minimum_percent)
+        self.max_horizontalSlider.setValue(self.maximum_percent)
+    
+    def process_img(self, img):
+        self.process_histogram(img)
+        img_depth = get_image_depth(img.dtype)
+        minimum = self.minimum_percent/100 * img_depth
+        maximum = self.maximum_percent/100 * img_depth
+        img = stretch_histogram(img, minimum, maximum)
+        return img
+        
+    def process_histogram(self, img):
+        self.graphWidget.clear()
+        img_depth = get_image_depth(img.dtype)
+        y,x = np.histogram(img, bins=100, range=(0, img_depth))
+        self.graphWidget.plot(y)
+        
