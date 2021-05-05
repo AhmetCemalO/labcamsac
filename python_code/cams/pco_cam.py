@@ -15,8 +15,11 @@ class PCOCam(GenericCam):
         
         super().__init__(name = 'PCO', cam_id = cam_id, params = params, format = format)
         
-        default_params = {'exposure':15000, 'triggerSource': 'external exposure start & software trigger',
-                          'poll_timeout':1, 'trigger':0}
+        default_params = {'exposure':15000, 
+                          'triggered':False,
+                          'triggerSource': 'external exposure start & software trigger'
+                          #'poll_timeout':1, 
+                          }
                           
                             # 'triggerSource' options
                             # * 'auto sequence'
@@ -28,7 +31,7 @@ class PCOCam(GenericCam):
                             # * 'external CDS control'
                             # * 'slow external exposure control'
                             # * 'external synchronized HDSDI'
-        self.exposed_params = ['exposure']
+        self.exposed_params = ['exposure', 'triggered']
         
         self.params = {**default_params, **self.params}
         
@@ -83,7 +86,7 @@ class PCOCam(GenericCam):
         adjusted_params = self.params.copy()
         
         adjusted_params['exposure time'] = adjusted_params.pop('exposure')/1_000_000
-        adjusted_params['trigger'] = adjusted_params['triggerSource'] if self.triggered else 'auto sequence'
+        adjusted_params['trigger'] = adjusted_params['triggerSource'] if self.params['triggered'] else 'auto sequence'
         
         self.cam_handle.configuration = adjusted_params
         display(f'PCO - configuration: {self.cam_handle.configuration}')
@@ -92,7 +95,7 @@ class PCOCam(GenericCam):
             self._record()
         
     def _record(self):
-        self.cam_handle.record(number_of_images=10, mode = 'fifo')
+        self.cam_handle.record(number_of_images = 10, mode = 'fifo')
         self.is_recording = True
 
     def stop(self):

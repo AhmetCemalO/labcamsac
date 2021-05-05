@@ -6,26 +6,26 @@ import numpy as np
 import cv2
 import time
 from PyQt5.QtGui import QImage, QPixmap, QIcon
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow, QAction
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow, QAction, QLineEdit
 from PyQt5.QtCore import Qt, QTimer
 
 from udp_socket import UDPSocket
-from view.UI_labcams import Ui_LabCams
+from view.UI_pycams import Ui_PyCams
 from view.UI_cam import Ui_Cam
 from view.UI_cam_settings import Ui_Settings
 from utils import display
 from camera_handler import CameraHandler
 
-class LabcamsWindow(QMainWindow):
+class PyCamsWindow(QMainWindow):
     def __init__(self, preferences = None):
         self.preferences = preferences if preferences is not None else {}
         
         super().__init__()
-        self.ui = Ui_LabCams()
+        self.ui = Ui_PyCams()
         self.ui.setupUi(self)
-        self.setWindowIcon(QIcon(path.dirname(path.realpath(__file__)) + '/icon/labcam.png'))
+        self.setWindowIcon(QIcon(path.dirname(path.realpath(__file__)) + '/icon/pycams.png'))
         
-        self.cam_handles = []
+        self.cam_widgets = []
         for cam in self.preferences.get('cams', []):
             if cam['driver'] in ['avt', 'pco']:
                 self.setup_camera(cam)
@@ -49,8 +49,8 @@ class LabcamsWindow(QMainWindow):
         if os.path.sep == '/': # Makes sure that the experiment name has the right slashes.
             save_path = save_path.replace('\\',os.path.sep)
         save_path = save_path.strip(' ')
-        for cam_handle in self.cam_handles:
-            cam_handle.set_save_folder(save_path)
+        for cam_widget in self.cam_widgets:
+            cam_widget.cam_handler.set_folder_path(save_path)
         
     def process_server_messages(self):
         try:
@@ -67,8 +67,9 @@ class LabcamsWindow(QMainWindow):
             self.server.send(b'ok=expname',address)
             
         elif action == 'trigger':
-            for cam_handle in self.cam_handles:
-                cam_handle.start_acquisition()
+            for cam_widget in self.cam_widgets:
+                if cam_widget.is_triggered:
+                    cam_widget.start_cam()
             self.server.send(b'ok=trigger',address)
         
         elif action == 'quit':
@@ -82,9 +83,9 @@ class LabcamsWindow(QMainWindow):
         writer_dict = {**self.preferences.get('recorder_params', {}), **cam_dict.get('recorder_params', {})}
         cam_handler = CameraHandler(cam_dict, writer_dict)
         if cam_handler.camera_connected:
-            self.cam_handles.append(cam_handler)
             cam_handler.start()
             widget = CamWidget(cam_handler)
+            self.cam_widgets.append(widget)
             self.setup_widget(cam_dict['description'], widget)
         
     def setup_widget(self, name, widget):
@@ -145,10 +146,10 @@ class LabcamsWindow(QMainWindow):
         """
         Clean up non GUI objects
         """
-        for cam_handle in self.cam_handles:
-            cam_handle.close()
+        for cam_widget in self.cam_widgets:
+            cam_widget.cam_handler.close()
         time.sleep(0.5)
-        display("Labcams out, bye!")
+        display("Pycams out, bye!")
         QApplication.quit()
         sys.exit()
 
@@ -163,14 +164,15 @@ def nparray_to_qimg(img):
     return QImage(img.data, width, height, bytesPerLine, format)
         
 class CamWidget(QWidget):
-    def __init__(self, camHandler = None):
+    def __init__(self, cam_handler = None):
         super().__init__()
         self.ui = Ui_Cam()
         self.ui.setupUi(self)
         
-        self.camHandler = camHandler
+        self.cam_handler = cam_handler
         
-        self.is_triggered = False
+        self._init_trigger_checkbox()
+        self.is_triggered = self.ui.trigger_checkBox.isChecked()
         
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._update)
@@ -183,23 +185,23 @@ class CamWidget(QWidget):
         self.ui.trigger_checkBox.stateChanged.connect(self._trigger)
         self.ui.keep_AR_checkBox.stateChanged.connect(self._pixmap_aspect_ratio)
         
-        self.settings = CamSettingsWidget(self.camHandler)
+        self.settings = CamSettingsWidget(self.cam_handler)
         self.ui.settings_pushButton.clicked.connect(self._toggle_settings)
-        
+    
     def _update(self):
-        if self.camHandler is not None:
-            dest = self.camHandler.get_filepath()
+        if self.cam_handler is not None:
+            dest = self.cam_handler.get_filepath()
             self.ui.save_location_label.setText('Filepath: ' + dest)
-            if self.camHandler.is_running.is_set():
+            if self.cam_handler.is_running.is_set():
                 self._update_img()
-            if self.camHandler.start_trigger.is_set() and not self.camHandler.stop_trigger.is_set():
-                self.ui.start_stop_pushButton.setText("Stop")
+            if self.cam_handler.start_trigger.is_set() and not self.cam_handler.stop_trigger.is_set():
+                self._set_stop_text()
             else:
-                self.ui.start_stop_pushButton.setText("Start")
+                self._set_start_text()
         super().update()
         
     def _update_img(self):
-        img = np.copy(self.camHandler.get_image())
+        img = np.copy(self.cam_handler.get_image())
         if img is not None:
             pixmap = QPixmap(nparray_to_qimg(img))
             pixmap = pixmap.scaled(self.ui.img_label.width(), self.ui.img_label.height(), self.AR_policy, Qt.FastTransformation)
@@ -220,32 +222,53 @@ class CamWidget(QWidget):
 
     def _start_stop(self):
         if self.ui.start_stop_pushButton.text() == "Start":
-            self._start_cam()
+            self.start_cam()
         else:
-            self._stop_cam()
+            self.stop_cam()
     
-    def _start_cam(self):
-        if self.camHandler is not None:
-            ret = self.camHandler.start_acquisition()
+    def start_cam(self):
+        if self.cam_handler is not None:
+            ret = self.cam_handler.start_acquisition()
             if ret:
-                self.ui.start_stop_pushButton.setText("Stop")
-                self.ui.record_checkBox.setEnabled(False)
+                self._set_stop_text()
         else:
             print("Could not start cam, camera already running", flush=True)
             
-    def _stop_cam(self):
-        self.camHandler.stop_acquisition()
+    def stop_cam(self):
+        self.cam_handler.stop_acquisition()
+        self._set_start_text()
+    
+    def _set_start_text(self):
         self.ui.start_stop_pushButton.setText("Start")
         self.ui.record_checkBox.setEnabled(True)
+        self.ui.trigger_checkBox.setEnabled(True)
+        
+    def _set_stop_text(self):
+        self.ui.start_stop_pushButton.setText("Stop")
+        self.ui.record_checkBox.setEnabled(False)
+        self.ui.trigger_checkBox.setEnabled(False)
         
     def _record(self, state):
         if state:
-            self.camHandler.start_saving()
+            self.cam_handler.start_saving()
         else:
-            self.camHandler.stop_saving()
-    
+            self.cam_handler.stop_saving()
+
+    def _init_trigger_checkbox(self):
+        self.cam_handler.query_cam_params()
+        while not self.cam_handler.cam_param_get_flag.is_set():
+            time.sleep(0.01)
+        params = self.cam_handler.get_cam_params()
+        if params is not None:
+            is_setting_available = 'triggered' in params
+            if is_setting_available:
+                self.ui.trigger_checkBox.setChecked(params['triggered'])
+            else:
+                self.ui.trigger_checkBox.setEnabled(False)
+                
     def _trigger(self, state):
         self.is_triggered = state
+        self.cam_handler.set_cam_param('triggered', state)
         
     def _toggle_settings(self):
         is_visible = self.settings.isVisible()
@@ -254,12 +277,12 @@ class CamWidget(QWidget):
             self.settings.init_fields()
 
 class CamSettingsWidget(QWidget):
-    def __init__(self, camHandler = None):
+    def __init__(self, cam_handler = None):
         super().__init__()
         self.ui = Ui_Settings()
         self.ui.setupUi(self)
         
-        self.camHandler = camHandler
+        self.cam_handler = cam_handler
         
         self.ui.apply_pushButton.clicked.connect(self._apply_settings)
         self.ui.autogain_checkBox.stateChanged.connect(self._autogain)
@@ -277,19 +300,20 @@ class CamSettingsWidget(QWidget):
         for setting in self.settings:
             val = self.settings[setting].text()
             if val.isdigit():
-                self.camHandler.set_cam_param(setting, int(val))
-        self.camHandler.set_cam_param('gain_auto', self.ui.autogain_checkBox.isChecked())
+                self.cam_handler.set_cam_param(setting, int(val))
+        self.cam_handler.set_cam_param('gain_auto', self.ui.autogain_checkBox.isChecked())
         
     def init_fields(self):
-        self.camHandler.query_cam_params()
-        while not self.camHandler.cam_param_get_flag.is_set():
+        self.cam_handler.query_cam_params()
+        while not self.cam_handler.cam_param_get_flag.is_set():
             time.sleep(0.01)
-        params = self.camHandler.get_cam_params()
+        params = self.cam_handler.get_cam_params()
         if params is not None:
             for setting in self.settings:
                 is_setting_available = setting in params
                 self.settings[setting].setEnabled(is_setting_available)
-                self.settings[setting].setText(str(params[setting]) if is_setting_available else "")
+                if isinstance(self.settings[setting], QLineEdit):
+                    self.settings[setting].setText(str(params[setting]) if is_setting_available else "")
                 
                 
                 

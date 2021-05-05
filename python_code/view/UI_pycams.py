@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'UI_labcams.ui'
+# Form implementation generated from reading ui file 'UI_pycams.ui'
 #
 # Created by: PyQt5 UI code generator 5.12.3
 #
@@ -10,11 +10,11 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 
-class Ui_LabCams(object):
-    def setupUi(self, LabCams):
-        LabCams.setObjectName("LabCams")
-        LabCams.resize(727, 578)
-        self.centralwidget = QtWidgets.QWidget(LabCams)
+class Ui_PyCams(object):
+    def setupUi(self, PyCams):
+        PyCams.setObjectName("PyCams")
+        PyCams.resize(727, 578)
+        self.centralwidget = QtWidgets.QWidget(PyCams)
         self.centralwidget.setObjectName("centralwidget")
         self.horizontalLayout = QtWidgets.QHBoxLayout(self.centralwidget)
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
@@ -22,23 +22,23 @@ class Ui_LabCams(object):
         self.mdiArea = QtWidgets.QMdiArea(self.centralwidget)
         self.mdiArea.setObjectName("mdiArea")
         self.horizontalLayout.addWidget(self.mdiArea)
-        LabCams.setCentralWidget(self.centralwidget)
-        self.menubar = QtWidgets.QMenuBar(LabCams)
+        PyCams.setCentralWidget(self.centralwidget)
+        self.menubar = QtWidgets.QMenuBar(PyCams)
         self.menubar.setGeometry(QtCore.QRect(0, 0, 727, 21))
         self.menubar.setObjectName("menubar")
         self.menuView = QtWidgets.QMenu(self.menubar)
         self.menuView.setObjectName("menuView")
-        LabCams.setMenuBar(self.menubar)
-        self.statusbar = QtWidgets.QStatusBar(LabCams)
+        PyCams.setMenuBar(self.menubar)
+        self.statusbar = QtWidgets.QStatusBar(PyCams)
         self.statusbar.setObjectName("statusbar")
-        LabCams.setStatusBar(self.statusbar)
-        self.actionCascade = QtWidgets.QAction(LabCams)
+        PyCams.setStatusBar(self.statusbar)
+        self.actionCascade = QtWidgets.QAction(PyCams)
         self.actionCascade.setObjectName("actionCascade")
-        self.actionTiled = QtWidgets.QAction(LabCams)
+        self.actionTiled = QtWidgets.QAction(PyCams)
         self.actionTiled.setObjectName("actionTiled")
-        self.actionSubwindow = QtWidgets.QAction(LabCams)
+        self.actionSubwindow = QtWidgets.QAction(PyCams)
         self.actionSubwindow.setObjectName("actionSubwindow")
-        self.actionTabbed = QtWidgets.QAction(LabCams)
+        self.actionTabbed = QtWidgets.QAction(PyCams)
         self.actionTabbed.setObjectName("actionTabbed")
         self.menuView.addAction(self.actionCascade)
         self.menuView.addAction(self.actionTiled)
@@ -46,24 +46,24 @@ class Ui_LabCams(object):
         self.menuView.addAction(self.actionSubwindow)
         self.menubar.addAction(self.menuView.menuAction())
 
-        self.retranslateUi(LabCams)
-        QtCore.QMetaObject.connectSlotsByName(LabCams)
+        self.retranslateUi(PyCams)
+        QtCore.QMetaObject.connectSlotsByName(PyCams)
 
-    def retranslateUi(self, LabCams):
+    def retranslateUi(self, PyCams):
         _translate = QtCore.QCoreApplication.translate
-        LabCams.setWindowTitle(_translate("LabCams", "LabCams"))
-        self.menuView.setTitle(_translate("LabCams", "View"))
-        self.actionCascade.setText(_translate("LabCams", "Cascade View"))
-        self.actionTiled.setText(_translate("LabCams", "Tiled View"))
-        self.actionSubwindow.setText(_translate("LabCams", "Subwindow View"))
-        self.actionTabbed.setText(_translate("LabCams", "Tabbed View"))
+        PyCams.setWindowTitle(_translate("PyCams", "PyCams"))
+        self.menuView.setTitle(_translate("PyCams", "View"))
+        self.actionCascade.setText(_translate("PyCams", "Cascade View"))
+        self.actionTiled.setText(_translate("PyCams", "Tiled View"))
+        self.actionSubwindow.setText(_translate("PyCams", "Subwindow View"))
+        self.actionTabbed.setText(_translate("PyCams", "Tabbed View"))
 
 
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
-    LabCams = QtWidgets.QMainWindow()
-    ui = Ui_LabCams()
-    ui.setupUi(LabCams)
-    LabCams.show()
+    PyCams = QtWidgets.QMainWindow()
+    ui = Ui_PyCams()
+    ui.setupUi(PyCams)
+    PyCams.show()
     sys.exit(app.exec_())

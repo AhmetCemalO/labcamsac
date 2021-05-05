@@ -20,7 +20,6 @@ class GenericCam:
         self.params = params if params is not None else {}
         self.format = format if format is not None else {}
         
-        self.triggered = False
         self.is_recording = False
         
         self.exposed_params = []
