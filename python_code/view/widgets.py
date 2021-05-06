@@ -359,7 +359,8 @@ def get_image_depth(dtype):
     elif dtype == np.uint16:
         img_depth = 65_535
     else:
-        img_depth = 20_000
+        print(f"Warning: no assigned image depth for your dtype {dtype}... using 65_535", flush=True)
+        img_depth = 65_535 # yes, that's a bit random
     return img_depth
 
 def stretch_histogram(img, lower_thresh, upper_thresh):
