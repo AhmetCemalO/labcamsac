@@ -186,10 +186,10 @@ class CamWidget(QWidget):
         self.trigger_checkBox.stateChanged.connect(self._trigger)
         self.keep_AR_checkBox.stateChanged.connect(self._pixmap_aspect_ratio)
         
-        self.cam_settings = CamSettingsWidget(self.cam_handler)
+        self.cam_settings = CamSettingsWidget(self, self.cam_handler)
         self.camera_settings_pushButton.clicked.connect(self._toggle_cam_settings)
         
-        self.display_settings = DisplaySettingsWidget()
+        self.display_settings = DisplaySettingsWidget(self)
         self.display_settings_pushButton.clicked.connect(self._toggle_display_settings)
     
     def _update(self):
@@ -287,8 +287,10 @@ class CamWidget(QWidget):
         self.display_settings.setVisible(not is_visible)
 
 class CamSettingsWidget(QWidget):
-    def __init__(self, cam_handler = None):
-        super().__init__()
+    def __init__(self, parent, cam_handler = None):
+        super().__init__(parent)
+        
+        self.setWindowFlag(Qt.Window)
         
         uic.loadUi(join(dirpath, 'UI_cam_settings.ui'), self)
         
@@ -347,8 +349,10 @@ def stretch_histogram(img, lower_thresh, upper_thresh):
         
 class DisplaySettingsWidget(QWidget):
     #https://www.mfitzp.com/tutorials/embed-pyqtgraph-custom-widgets-qt-app/
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent):
+        super().__init__(parent)
+        
+        self.setWindowFlag(Qt.Window)
         
         uic.loadUi(join(dirpath, 'UI_display_settings.ui'), self)
         
