@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>185</width>
-    <height>104</height>
+    <height>154</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -18,15 +18,15 @@
   </property>
   <property name="maximumSize">
    <size>
-    <width>16777215</width>
-    <height>105</height>
+    <width>200</width>
+    <height>200</height>
    </size>
   </property>
   <property name="windowTitle">
    <string>Camera Settings</string>
   </property>
   <property name="toolTip">
-   <string>Allows to check/set the most commonly used camera settings</string>
+   <string>Allows to check/set the most commonly used camera settings. The non available options are greyed out</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="spacing">
@@ -148,6 +148,119 @@
          <width>16777215</width>
          <height>20</height>
         </size>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <item>
+      <widget class="QLabel" name="binning_label">
+       <property name="minimumSize">
+        <size>
+         <width>76</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Binning</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="binning_comboBox">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <item>
+        <property name="text">
+         <string>1</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>2</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>4</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_5" stretch="0,0,0">
+     <item>
+      <widget class="QLabel" name="label_3">
+       <property name="minimumSize">
+        <size>
+         <width>60</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>Acquisition mode: 'continuous' is free run, 'nframes' allows to acquire an arbitratry number of frames</string>
+       </property>
+       <property name="text">
+        <string>Mode</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="mode_comboBox">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>80</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>16777215</width>
+         <height>20</height>
+        </size>
+       </property>
+       <item>
+        <property name="text">
+         <string>Continuous</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>NFrames</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="nframes_lineEdit">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>15</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>Number of frames to acquire upon receiving a software trigger</string>
        </property>
       </widget>
      </item>

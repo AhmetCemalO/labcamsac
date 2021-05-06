@@ -8,7 +8,7 @@ import time
 from functools import lru_cache
 from PyQt5 import uic
 from PyQt5.QtGui import QImage, QPixmap, QIcon
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow, QAction, QLineEdit
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow, QAction, QLineEdit, QComboBox
 from PyQt5.QtCore import Qt, QTimer
 
 from udp_socket import UDPSocket
@@ -181,6 +181,8 @@ class CamWidget(QWidget):
         
         self.AR_policy = Qt.KeepAspectRatio
         
+        self.img = None
+        
         self.start_stop_pushButton.clicked.connect(self._start_stop)
         self.record_checkBox.stateChanged.connect(self._record)
         self.trigger_checkBox.stateChanged.connect(self._trigger)
@@ -197,28 +199,24 @@ class CamWidget(QWidget):
             dest = self.cam_handler.get_filepath()
             self.save_location_label.setText('Filepath: ' + dest)
             if self.cam_handler.is_running.is_set():
-                self._update_img()
+                self.img = np.copy(self.cam_handler.get_image())
             if self.cam_handler.start_trigger.is_set() and not self.cam_handler.stop_trigger.is_set():
                 self._set_stop_text()
             else:
                 self._set_start_text()
+        self._update_img()
         super().update()
         
     def _update_img(self):
-        img = np.copy(self.cam_handler.get_image())
-        if img is not None:
-            if self.display_settings.isVisible():
-                img = self.display_settings.process_img(img)
+        if self.img is not None:
+            img = self.display_settings.process_img(self.img)
             pixmap = QPixmap(nparray_to_qimg(img))
             pixmap = pixmap.scaled(self.img_label.width(), self.img_label.height(), self.AR_policy, Qt.FastTransformation)
             self.img_label.setPixmap(pixmap)
     
     def _pixmap_aspect_ratio(self, state):
-        if state:
-            self.AR_policy = Qt.KeepAspectRatio
-        else:
-            self.AR_policy = Qt.IgnoreAspectRatio
-            
+        self.AR_policy = Qt.KeepAspectRatio if state else Qt.IgnoreAspectRatio
+
     def resizeEvent(self, event):
         pixmap = self.img_label.pixmap()
         if pixmap is not None:
@@ -297,20 +295,31 @@ class CamSettingsWidget(QWidget):
         self.cam_handler = cam_handler
         
         self.apply_pushButton.clicked.connect(self._apply_settings)
-        self.autogain_checkBox.stateChanged.connect(self._autogain)
-        self._autogain(self.autogain_checkBox.isChecked())
+        self.autogain_checkBox.stateChanged.connect(self._toggle_gain_lineEdit)
+        self._toggle_gain_lineEdit(self.autogain_checkBox.isChecked())
+        self.mode_comboBox.currentTextChanged.connect(self._toggle_nframes_lineEdit)
+        self._toggle_nframes_lineEdit(self.mode_comboBox.currentText())
         
         self.settings = {'frame_rate': self.framerate_lineEdit,
                          'exposure': self.exposure_lineEdit,
                          'gain': self.gain_lineEdit,
-                         'gain_auto' : self.autogain_checkBox}
+                         'gain_auto' : self.autogain_checkBox,
+                         'binning': self.binning_comboBox}
     
-    def _autogain(self, state):
+    def _toggle_gain_lineEdit(self, state):
         self.gain_lineEdit.setEnabled(not state)
+    
+    def _toggle_nframes_lineEdit(self, text):
+        self.nframes_lineEdit.setEnabled(text != "Continuous")
             
     def _apply_settings(self):
         for setting in self.settings:
-            val = self.settings[setting].text()
+            if isinstance(self.settings[setting], QLineEdit):
+                val = self.settings[setting].text()
+            elif isinstance(self.settings[setting], QComboBox):
+                val = self.settings[setting].currentText()
+            else:
+                continue
             if val.isdigit():
                 self.cam_handler.set_cam_param(setting, int(val))
         self.cam_handler.set_cam_param('gain_auto', self.autogain_checkBox.isChecked())
@@ -326,7 +335,8 @@ class CamSettingsWidget(QWidget):
                 self.settings[setting].setEnabled(is_setting_available)
                 if isinstance(self.settings[setting], QLineEdit):
                     self.settings[setting].setText(str(params[setting]) if is_setting_available else "")
-
+                elif isinstance(self.settings[setting], QComboBox):
+                    self.settings[setting].setCurrentText(str(params[setting]) if is_setting_available else "")
 
 @lru_cache(maxsize=1)
 def get_image_depth(dtype):

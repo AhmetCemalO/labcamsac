@@ -17,7 +17,8 @@ class PCOCam(GenericCam):
         
         default_params = {'exposure':15000, 
                           'triggered':False,
-                          'triggerSource': 'external exposure start & software trigger'
+                          'triggerSource': 'external exposure start & software trigger',
+                          'binning': 1
                           #'poll_timeout':1, 
                           }
                           
@@ -31,7 +32,7 @@ class PCOCam(GenericCam):
                             # * 'external CDS control'
                             # * 'slow external exposure control'
                             # * 'external synchronized HDSDI'
-        self.exposed_params = ['exposure', 'triggered']
+        self.exposed_params = ['exposure', 'triggered', 'binning']
         
         self.params = {**default_params, **self.params}
         
@@ -87,6 +88,7 @@ class PCOCam(GenericCam):
         
         adjusted_params['exposure time'] = adjusted_params.pop('exposure')/1_000_000
         adjusted_params['trigger'] = adjusted_params['triggerSource'] if self.params['triggered'] else 'auto sequence'
+        adjusted_params['binning'] = (adjusted_params['binning'],adjusted_params['binning'])
         
         self.cam_handle.configuration = adjusted_params
         display(f'PCO - configuration: {self.cam_handle.configuration}')

@@ -196,7 +196,7 @@
         </size>
        </property>
        <property name="toolTip">
-        <string>Toggle to trigger via UDP command 'trigger'</string>
+        <string>Toggle to trigger acquisition via UDP command 'trigger'</string>
        </property>
        <property name="text">
         <string>Triggered</string>
