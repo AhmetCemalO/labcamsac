@@ -31,14 +31,14 @@ class AVTCam(GenericCam):
         super().__init__(name = 'AVT', cam_id = cam_id, params = params, format = format)
         
         default_params = {'exposure':29000, 'frame_rate':30,'gain':10, 'gain_auto': False,
-                          'triggered':False, 
+                          'acquisition_mode': 'Continuous', 'n_frames': 1,
+                          'triggered': False, # hardware trigger
                           'triggerSource': 'Line1', 'triggerMode':'LevelHigh',
-                          'triggerSelector': 'FrameStart', 'acquisitionMode': 'Continuous',
-                          'nTriggeredFrames': 1000
+                          'triggerSelector': 'FrameStart'
                            #'frame_timeout':100,
                           }
                           
-        self.exposed_params = ['frame_rate', 'gain', 'exposure', 'gain_auto', 'triggered']
+        self.exposed_params = ['frame_rate', 'gain', 'exposure', 'gain_auto', 'triggered', 'acquisition_mode', 'n_frames']
         
         self.params = {**default_params, **self.params}
 
@@ -77,28 +77,32 @@ class AVTCam(GenericCam):
         return True
         
     def apply_params(self):
+        
+        adjusted_params = self.params.copy() # adjust to specific interface if needed
+        
         self.cam_handle.EventNotification.set('On')
         self.cam_handle.set_pixel_format(PixelFormat.Mono8)
         self.cam_handle.SyncOutSelector.set('SyncOut1')
         self.cam_handle.SyncOutSource.set('FrameReadout')#'Exposing'
         
-        self.cam_handle.AcquisitionFrameRateAbs.set(self.params['frame_rate'])
-        self.cam_handle.Gain.set(self.params['gain'])
-        self.cam_handle.GainAuto.set('Once' if self.params['gain_auto'] else 'Off')
+        self.cam_handle.AcquisitionFrameRateAbs.set(adjusted_params['frame_rate'])
+        self.cam_handle.Gain.set(adjusted_params['gain'])
+        self.cam_handle.GainAuto.set('Once' if adjusted_params['gain_auto'] else 'Off')
         
-        self.cam_handle.ExposureTimeAbs.set(self.params['exposure'])
+        self.cam_handle.ExposureTimeAbs.set(adjusted_params['exposure'])
         
-        self.cam_handle.TriggerMode.set('On' if self.params['triggered'] else 'Off')
-        self.cam_handle.TriggerSelector.set(self.params['triggerSelector'] if self.params['triggered'] else 'FrameStart')
-        self.cam_handle.TriggerSource.set(self.params['triggerSource'] if self.params['triggered'] else 'FixedRate')
+        self.cam_handle.TriggerMode.set('On' if adjusted_params['triggered'] else 'Off')
+        self.cam_handle.TriggerSelector.set(adjusted_params['triggerSelector'] if adjusted_params['triggered'] else 'FrameStart')
+        self.cam_handle.TriggerSource.set(adjusted_params['triggerSource'] if adjusted_params['triggered'] else 'FixedRate')
         
-        self.cam_handle.AcquisitionMode.set(self.params['acquisitionMode'] if self.params['triggered'] else 'Continuous')
+        self.cam_handle.AcquisitionMode.set(adjusted_params['acquisition_mode'] if adjusted_params['triggered'] else 'Continuous')
         self.cam_handle.ExposureMode.set('Timed')
         
-        if self.params['triggered']:
-            self.cam_handle.TriggerActivation.set(self.params['triggerMode'])
-            if self.params['acquisitionMode'] == 'MultiFrame':
-                self.cam_handle.AcquisitionFrameCount.set(self.params['nTriggeredFrames'])
+        if adjusted_params['acquisition_mode'] == 'MultiFrame':
+            self.cam_handle.AcquisitionFrameCount.set(adjusted_params['n_frames'])
+            
+        if adjusted_params['triggered']:
+            self.cam_handle.TriggerActivation.set(adjusted_params['triggerMode'])
             display(f'[{self.name} {self.cam_id}] Using network trigger.')
             
 

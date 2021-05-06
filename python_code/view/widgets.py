@@ -8,7 +8,7 @@ import time
 from functools import lru_cache
 from PyQt5 import uic
 from PyQt5.QtGui import QImage, QPixmap, QIcon
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow, QAction, QLineEdit, QComboBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QMessageBox, QMdiSubWindow, QAction, QComboBox, QSpinBox, QCheckBox
 from PyQt5.QtCore import Qt, QTimer
 
 from udp_socket import UDPSocket
@@ -181,7 +181,9 @@ class CamWidget(QWidget):
         
         self.AR_policy = Qt.KeepAspectRatio
         
-        self.img = None
+        self.original_img = None
+        self.processed_img = None
+        self.is_img_processed = False
         
         self.start_stop_pushButton.clicked.connect(self._start_stop)
         self.record_checkBox.stateChanged.connect(self._record)
@@ -199,18 +201,22 @@ class CamWidget(QWidget):
             dest = self.cam_handler.get_filepath()
             self.save_location_label.setText('Filepath: ' + dest)
             if self.cam_handler.is_running.is_set():
-                self.img = np.copy(self.cam_handler.get_image())
+                self.original_img = np.copy(self.cam_handler.get_image())
+                self.is_img_processed = False
             if self.cam_handler.start_trigger.is_set() and not self.cam_handler.stop_trigger.is_set():
                 self._set_stop_text()
             else:
                 self._set_start_text()
+        if self.display_settings.isVisible():
+            self.is_img_processed = False
         self._update_img()
         super().update()
         
     def _update_img(self):
-        if self.img is not None:
-            img = self.display_settings.process_img(self.img)
-            pixmap = QPixmap(nparray_to_qimg(img))
+        if self.original_img is not None:
+            self.processed_img = self.display_settings.process_img(self.original_img) if not self.is_img_processed else self.processed_img
+            self.is_img_processed = True
+            pixmap = QPixmap(nparray_to_qimg(self.processed_img))
             pixmap = pixmap.scaled(self.img_label.width(), self.img_label.height(), self.AR_policy, Qt.FastTransformation)
             self.img_label.setPixmap(pixmap)
     
@@ -295,34 +301,36 @@ class CamSettingsWidget(QWidget):
         self.cam_handler = cam_handler
         
         self.apply_pushButton.clicked.connect(self._apply_settings)
-        self.autogain_checkBox.stateChanged.connect(self._toggle_gain_lineEdit)
-        self._toggle_gain_lineEdit(self.autogain_checkBox.isChecked())
-        self.mode_comboBox.currentTextChanged.connect(self._toggle_nframes_lineEdit)
-        self._toggle_nframes_lineEdit(self.mode_comboBox.currentText())
+        self.autogain_checkBox.stateChanged.connect(self._toggle_gain_spinBox)
+        self.mode_comboBox.currentTextChanged.connect(self._toggle_nframes_spinBox)
         
-        self.settings = {'frame_rate': self.framerate_lineEdit,
-                         'exposure': self.exposure_lineEdit,
-                         'gain': self.gain_lineEdit,
+        self.settings = {'frame_rate': self.framerate_spinBox,
+                         'exposure': self.exposure_spinBox,
+                         'gain': self.gain_spinBox,
                          'gain_auto' : self.autogain_checkBox,
-                         'binning': self.binning_comboBox}
+                         'binning': self.binning_comboBox,
+                         'acquisition_mode': self.mode_comboBox,
+                         'n_frames': self.nframes_spinBox}
     
-    def _toggle_gain_lineEdit(self, state):
-        self.gain_lineEdit.setEnabled(not state)
+    def _toggle_gain_spinBox(self, state):
+        self.gain_spinBox.setEnabled(not state)
     
-    def _toggle_nframes_lineEdit(self, text):
-        self.nframes_lineEdit.setEnabled(text != "Continuous")
+    def _toggle_nframes_spinBox(self, text):
+        self.nframes_spinBox.setEnabled(text != "Continuous")
             
     def _apply_settings(self):
         for setting in self.settings:
-            if isinstance(self.settings[setting], QLineEdit):
-                val = self.settings[setting].text()
-            elif isinstance(self.settings[setting], QComboBox):
-                val = self.settings[setting].currentText()
-            else:
-                continue
-            if val.isdigit():
-                self.cam_handler.set_cam_param(setting, int(val))
-        self.cam_handler.set_cam_param('gain_auto', self.autogain_checkBox.isChecked())
+            widget = self.settings[setting]
+            if widget.isEnabled():
+                if isinstance(widget, QSpinBox):
+                    val = widget.value()
+                elif isinstance(widget, QComboBox):
+                    val = widget.currentText()
+                elif isinstance(widget, QCheckBox):
+                    val = widget.isChecked()
+                else:
+                    continue
+                self.cam_handler.set_cam_param(setting, val)
         
     def init_fields(self):
         self.cam_handler.query_cam_params()
@@ -332,11 +340,16 @@ class CamSettingsWidget(QWidget):
         if params is not None:
             for setting in self.settings:
                 is_setting_available = setting in params
-                self.settings[setting].setEnabled(is_setting_available)
-                if isinstance(self.settings[setting], QLineEdit):
-                    self.settings[setting].setText(str(params[setting]) if is_setting_available else "")
-                elif isinstance(self.settings[setting], QComboBox):
-                    self.settings[setting].setCurrentText(str(params[setting]) if is_setting_available else "")
+                widget = self.settings[setting]
+                widget.setEnabled(is_setting_available)
+                if isinstance(widget, QSpinBox):
+                    widget.setValue(params[setting] if is_setting_available else 0)
+                elif isinstance(widget, QComboBox):
+                    widget.setCurrentText(params[setting] if is_setting_available else "")
+                elif isinstance(widget, QCheckBox):
+                    widget.setChecked(params[setting] if is_setting_available else False)
+        self._toggle_gain_spinBox(self.autogain_checkBox.isChecked())
+        self._toggle_nframes_spinBox(self.mode_comboBox.currentText())
 
 @lru_cache(maxsize=1)
 def get_image_depth(dtype):
@@ -389,7 +402,10 @@ class DisplaySettingsWidget(QWidget):
         self.max_horizontalSlider.setValue(self.maximum_percent)
     
     def process_img(self, img):
-        self.process_histogram(img)
+        if self.isVisible():
+            self.process_histogram(img)
+        if self.minimum_percent == 0 and self.maximum_percent == 100:
+            return img
         img_depth = get_image_depth(img.dtype)
         minimum = self.minimum_percent/100 * img_depth
         maximum = self.maximum_percent/100 * img_depth

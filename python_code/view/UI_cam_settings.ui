@@ -6,12 +6,12 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>185</width>
+    <width>195</width>
     <height>154</height>
    </rect>
   </property>
   <property name="sizePolicy">
-   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
     <horstretch>0</horstretch>
     <verstretch>0</verstretch>
    </sizepolicy>
@@ -69,12 +69,12 @@
       </widget>
      </item>
      <item>
-      <widget class="QLineEdit" name="framerate_lineEdit">
-       <property name="maximumSize">
-        <size>
-         <width>16777215</width>
-         <height>20</height>
-        </size>
+      <widget class="QSpinBox" name="framerate_spinBox">
+       <property name="minimum">
+        <number>1</number>
+       </property>
+       <property name="maximum">
+        <number>2000</number>
        </property>
       </widget>
      </item>
@@ -102,12 +102,12 @@
       </widget>
      </item>
      <item>
-      <widget class="QLineEdit" name="exposure_lineEdit">
-       <property name="maximumSize">
-        <size>
-         <width>16777215</width>
-         <height>20</height>
-        </size>
+      <widget class="QSpinBox" name="exposure_spinBox">
+       <property name="minimum">
+        <number>1</number>
+       </property>
+       <property name="maximum">
+        <number>2000000</number>
        </property>
       </widget>
      </item>
@@ -142,12 +142,9 @@
       </widget>
      </item>
      <item>
-      <widget class="QLineEdit" name="gain_lineEdit">
-       <property name="maximumSize">
-        <size>
-         <width>16777215</width>
-         <height>20</height>
-        </size>
+      <widget class="QSpinBox" name="gain_spinBox">
+       <property name="maximum">
+        <number>15</number>
        </property>
       </widget>
      </item>
@@ -240,27 +237,21 @@
        </item>
        <item>
         <property name="text">
-         <string>NFrames</string>
+         <string>MultiFrame</string>
         </property>
        </item>
       </widget>
      </item>
      <item>
-      <widget class="QLineEdit" name="nframes_lineEdit">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
+      <widget class="QSpinBox" name="nframes_spinBox">
        <property name="minimumSize">
         <size>
-         <width>15</width>
+         <width>35</width>
          <height>0</height>
         </size>
        </property>
-       <property name="toolTip">
-        <string>Number of frames to acquire upon receiving a software trigger</string>
+       <property name="maximum">
+        <number>100000</number>
        </property>
       </widget>
      </item>
