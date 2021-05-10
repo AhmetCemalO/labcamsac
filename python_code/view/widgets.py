@@ -185,6 +185,8 @@ class CamWidget(QWidget):
         self.processed_img = None
         self.is_img_processed = False
         
+        self.frame_nr = None
+        
         self.start_stop_pushButton.clicked.connect(self._start_stop)
         self.record_checkBox.stateChanged.connect(self._record)
         self.trigger_checkBox.stateChanged.connect(self._trigger)
@@ -200,9 +202,10 @@ class CamWidget(QWidget):
         if self.cam_handler is not None:
             dest = self.cam_handler.get_filepath()
             self.save_location_label.setText('Filepath: ' + dest)
-            if self.cam_handler.is_running.is_set():
+            if self.frame_nr != self.cam_handler.total_frames.value:
                 self.original_img = np.copy(self.cam_handler.get_image())
                 self.is_img_processed = False
+                self.frame_nr = self.cam_handler.total_frames.value
             if self.cam_handler.start_trigger.is_set() and not self.cam_handler.stop_trigger.is_set():
                 self._set_stop_text()
             else:

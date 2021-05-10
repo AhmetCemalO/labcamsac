@@ -31,8 +31,7 @@ class CameraHandler(Process):
         self.stop_trigger = Event()
         self.camera_ready = Event()
         self.saving = Event()
-        self.nframes = Value('i',0)
-        
+
         self.cam_param_InQ = Queue()
         self.cam_param_OutQ = Queue()
         self.cam_param_get_flag = Event()
@@ -40,10 +39,14 @@ class CameraHandler(Process):
         self.img = None
         self.folder_path_array = Array('u',' ' * 1024) #can set folder
         self.filepath_array = Array('u',' ' * 1024) #filepath is readonly
-        self.run_number = 0 
+        
+        self.run_nr = 0
+        self.frame_nr = 0
+        
+        self.total_frames = Value('i', 0)
         
         self.lastframeid = -1
-        self.lasttime = 0
+        self.last_timestamp = 0
         
         self.camera_connected = self._open_cam().is_connected()
         
@@ -98,9 +101,12 @@ class CameraHandler(Process):
                     while not self.stop_trigger.is_set():
                         self._process_queues()
                         frame, metadata = cam.image()
-                        if self.saving.is_set():
-                            writer.save(frame, metadata)
-                        self._update(frame,metadata)
+                        if frame is not None:
+                            if self.saving.is_set():
+                                writer.save(frame, metadata)
+                            self._update(frame,metadata)
+                        elif metadata == "stop":
+                            self.stop_trigger.set()
                     display(f'[{cam.name} {cam.cam_id}] stop trigger set.')
                     self.close_run()
     
@@ -135,7 +141,7 @@ class CameraHandler(Process):
             self.folder_path_array[i] = folder_path[i]
     
     def get_new_filename(self):
-        return datetime.date.today().strftime('%y%m%d') + '_' + f"{self.run_number}"
+        return datetime.date.today().strftime('%y%m%d') + '_' + f"{self.run_nr}"
     
     def get_new_filepath(self):
         filepath = join(self.get_folder_path(), self.get_new_filename())
@@ -154,7 +160,7 @@ class CameraHandler(Process):
         return self.img
     
     def init_run(self):
-        self.nframes.value = 0
+        self.frame_nr = 0
         self.lastframeid = -1
         self.writer.set_filepath(self.get_new_filepath())
         self.camera_ready.set()
@@ -162,17 +168,18 @@ class CameraHandler(Process):
     def close_run(self):
         self.start_trigger.clear()
         if self.saving.is_set():
-            self.run_number += 1
+            self.run_nr += 1
         if not self.close_event.is_set():
             self.stop_trigger.clear()
         self.is_running.clear()
 
     def _update(self, frame, metadata):
         self._update_buffer(frame)
-        self.nframes.value += 1
+        self.frame_nr += 1
+        self.total_frames.value += 1
         frameID,timestamp = metadata[:2]
         self.lastframeid = frameID
-        self.lasttime = timestamp
+        self.last_timestamp = timestamp
     
     def _update_buffer(self,frame):
         self.img[:] = np.reshape(frame,self.img.shape)[:]
@@ -181,6 +188,7 @@ class CameraHandler(Process):
         while not self.start_trigger.is_set() and not self.stop_trigger.is_set():
             self._process_queues()
             time.sleep(0.001) # limits resolution to 1 ms
+        self.cam.apply_params()
         self.is_running.set()
         self.camera_ready.clear()
     

@@ -21,6 +21,7 @@ class AVTCam(GenericCam):
         are susceptible to be differently named in other AVT cameras.
         Should such a thing happen, make this class more abstract and inherit it.
     """
+    timeout = 2000
     def __init__(self, cam_id = None, params = None, format = None):
         
         if cam_id is None:
@@ -78,6 +79,10 @@ class AVTCam(GenericCam):
         
     def apply_params(self):
         
+        resume_recording = self.is_recording
+        if self.is_recording:
+            self.stop()
+            
         adjusted_params = self.params.copy() # adjust to specific interface if needed
         
         self.cam_handle.EventNotification.set('On')
@@ -95,16 +100,18 @@ class AVTCam(GenericCam):
         self.cam_handle.TriggerSelector.set(adjusted_params['triggerSelector'] if adjusted_params['triggered'] else 'FrameStart')
         self.cam_handle.TriggerSource.set(adjusted_params['triggerSource'] if adjusted_params['triggered'] else 'FixedRate')
         
-        self.cam_handle.AcquisitionMode.set(adjusted_params['acquisition_mode'] if adjusted_params['triggered'] else 'Continuous')
         self.cam_handle.ExposureMode.set('Timed')
         
-        if adjusted_params['acquisition_mode'] == 'MultiFrame':
-            self.cam_handle.AcquisitionFrameCount.set(adjusted_params['n_frames'])
+        # self.cam_handle.AcquisitionMode.set(adjusted_params['acquisition_mode'])
+        # if adjusted_params['acquisition_mode'] == 'MultiFrame':
+            # self.cam_handle.AcquisitionFrameCount.set(adjusted_params['n_frames'])
             
         if adjusted_params['triggered']:
             self.cam_handle.TriggerActivation.set(adjusted_params['triggerMode'])
             display(f'[{self.name} {self.cam_id}] Using network trigger.')
-            
+        
+        if resume_recording:
+            self._record()
 
     def get_features(self):
         features_str = ""
@@ -127,21 +134,25 @@ class AVTCam(GenericCam):
         self.cam_handle.AcquisitionStart.run()
         while not self.cam_handle.AcquisitionStart.is_done():
             time.sleep(0.01)
-        self.frame_generator = self.cam_handle.get_frame_generator()
+        limit = self.params['n_frames'] if self.params['acquisition_mode'] == "MultiFrame" else None
+        self.frame_generator = self.cam_handle.get_frame_generator(limit = limit, timeout_ms = self.timeout)
+        self.is_recording = True
         
     def stop(self):
         self.cam_handle.AcquisitionStop.run()
         while not self.cam_handle.AcquisitionStop.is_done():
             time.sleep(0.01)
-        pass
+        self.is_recording = False
         
     def image(self):
-        if hasattr(self, 'frame_generator'):
-            frame = next(self.frame_generator)
-        else:
-            frame = self.cam_handle.get_frame()
-        img = frame.as_opencv_image()
-        frame_id = frame.get_id()
-        timestamp = frame.get_timestamp()
-        return img, (frame_id, timestamp)
-    
+        try:
+            frame = next(self.frame_generator) if hasattr(self, 'frame_generator') else self.cam_handle.get_frame(timeout_ms = self.timeout)
+            img = frame.as_opencv_image()
+            frame_id = frame.get_id()
+            timestamp = frame.get_timestamp()
+            return img, (frame_id, timestamp)
+        except StopIteration:
+            return None, "stop"
+        except VimbaTimeout:
+            return None, "timeout"
+      
