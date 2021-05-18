@@ -36,7 +36,7 @@ class PyCamsWindow(QMainWindow):
         if server_params is not None:
             server = server_params.get('server', None)
             if server == "udp":
-                self.server = UDPSocket('0.0.0.0', server_params.get('server_port', 9999))
+                self.server = UDPSocket((server_params.get('server_ip', '0.0.0.0'), server_params.get('server_port', 9999)))
                 self._timer = QTimer(self)
                 self._timer.timeout.connect(self.process_server_messages)
                 self._timer.start(server_params.get('server_refresh_time', 100))
@@ -55,28 +55,26 @@ class PyCamsWindow(QMainWindow):
             cam_widget.cam_handler.set_folder_path(save_path)
         
     def process_server_messages(self):
-        try:
-            msg,address = self.server.receive()
-        except Exception:
-            return
-        action, *value = [i.lower() for i in msg.decode().split('=')]
-        if action == 'ping':
-            display('Server got PING.')
-            self.server.send(b'pong',address)
+        ret, msg,address = self.server.receive()
+        if ret:
+            action, *value = [i.lower() for i in msg.split('=')]
+            if action == 'ping':
+                display(f'Server got pinged from {address}')
+                self.server.send('pong',address)
+                
+            elif action == 'expname':
+                self.set_save_path(value)
+                self.server.send('ok=expname',address)
+                
+            elif action == 'trigger':
+                for cam_widget in self.cam_widgets:
+                    if cam_widget.is_triggered:
+                        cam_widget.start_cam()
+                self.server.send('ok=trigger',address)
             
-        elif action == 'expname':
-            self.set_save_path(value)
-            self.server.send(b'ok=expname',address)
-            
-        elif action == 'trigger':
-            for cam_widget in self.cam_widgets:
-                if cam_widget.is_triggered:
-                    cam_widget.start_cam()
-            self.server.send(b'ok=trigger',address)
-        
-        elif action == 'quit':
-            self.server.send(b'ok=bye',address)
-            self.close()
+            elif action == 'quit':
+                self.server.send('ok=bye',address)
+                self.close()
             
         
     def setup_camera(self, cam_dict):
