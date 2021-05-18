@@ -96,9 +96,9 @@ class AVTCam(GenericCam):
         
         self.cam_handle.ExposureTimeAbs.set(adjusted_params['exposure'])
         
-        self.cam_handle.TriggerMode.set('On' if adjusted_params['triggered'] else 'Off')
-        self.cam_handle.TriggerSelector.set(adjusted_params['triggerSelector'] if adjusted_params['triggered'] else 'FrameStart')
-        self.cam_handle.TriggerSource.set(adjusted_params['triggerSource'] if adjusted_params['triggered'] else 'FixedRate')
+        # self.cam_handle.TriggerMode.set('On' if adjusted_params['triggered'] else 'Off')
+        # self.cam_handle.TriggerSelector.set(adjusted_params['triggerSelector'] if adjusted_params['triggered'] else 'FrameStart')
+        # self.cam_handle.TriggerSource.set(adjusted_params['triggerSource'] if adjusted_params['triggered'] else 'FixedRate')
         
         self.cam_handle.ExposureMode.set('Timed')
         
@@ -106,9 +106,9 @@ class AVTCam(GenericCam):
         # if adjusted_params['acquisition_mode'] == 'MultiFrame':
             # self.cam_handle.AcquisitionFrameCount.set(adjusted_params['n_frames'])
             
-        if adjusted_params['triggered']:
-            self.cam_handle.TriggerActivation.set(adjusted_params['triggerMode'])
-            display(f'[{self.name} {self.cam_id}] Using network trigger.')
+        # if adjusted_params['triggered']:
+            # self.cam_handle.TriggerActivation.set(adjusted_params['triggerMode'])
+            # display(f'[{self.name} {self.cam_id}] Using network trigger.')
         
         if resume_recording:
             self._record()

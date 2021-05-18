@@ -58,21 +58,32 @@ class PyCamsWindow(QMainWindow):
         ret, msg,address = self.server.receive()
         if ret:
             action, *value = [i.lower() for i in msg.split('=')]
+            
             if action == 'ping':
-                display(f'Server got pinged from {address}')
+                display(f'Server got pinged [{address}]')
                 self.server.send('pong',address)
                 
-            elif action == 'expname':
+            elif action == 'folder':
                 self.set_save_path(value)
-                self.server.send('ok=expname',address)
+                display(f'Folder changed to {value} [{address}]')
+                self.server.send('ok=folder',address)
                 
-            elif action == 'trigger':
+            elif action == 'start':
+                display(f'Starting triggered cameras [{address}]')
                 for cam_widget in self.cam_widgets:
                     if cam_widget.is_triggered:
                         cam_widget.start_cam()
-                self.server.send('ok=trigger',address)
+                self.server.send('ok=start',address)
+                
+            elif action == 'stop':
+                display(f'Stopping triggered cameras [{address}]')
+                for cam_widget in self.cam_widgets:
+                    if cam_widget.is_triggered:
+                        cam_widget.stop_cam()
+                self.server.send('ok=stop',address)
             
             elif action == 'quit':
+                display(f'Exiting [{address}]')
                 self.server.send('ok=bye',address)
                 self.close()
             
