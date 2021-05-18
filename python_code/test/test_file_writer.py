@@ -21,28 +21,40 @@ def get_test_img():
 
 class TestFileWriter(unittest.TestCase):
 
+    def setUp(self):
+        self.img = get_test_img()
+        self.generated_folders = []
+    
+    def tearDown(self):
+        for folder in self.generated_folders:
+            try:
+                shutil.rmtree(folder)
+            except OSError as e:
+                print("Error: %s : %s" % (dir_path, e.strerror))
+            
     def test_opencv_writer(self):
         """Write 60 frames of identical Lenna image into an avi file using the OpenCVWriter,
         read the generated video and count the frames, then delete created folders/file"""
-        img = get_test_img()
         data_folder = test_path
         data_name = 'autogen_test_opencv_writer'
         filename = 'autogen_opencv_video' #without extension
-        pathformat = join('{datafolder}','{dataname}','{filename}','{run}_{nfiles}')
-        nfiles = 60
+        dir_path = join(data_folder, data_name)
+        self.generated_folders.append(dir_path)
+        filepath = join(dir_path, filename)
+        nframes = 60
         # WRITE
-        with OpenCVWriter(filename = filename, dataname = data_name,
-                          datafolder = data_folder, pathformat = pathformat,
-                          frames_per_file = 0, fourcc = 'XVID', frame_rate = 60) as writer:
-            for i in range(nfiles):
+        with OpenCVWriter(filepath = filepath) as writer:
+            for i in range(nframes):
                 frame_id = i
                 timestamp = time.time()
                 metadata = (frame_id, timestamp) #dummy metadata but respect format
-                writer.save(img, metadata)
-        
+                writer.save(self.img, metadata)
         # READ
-        path_dict = {'datafolder': data_folder, 'dataname': data_name, 'filename': filename, 'run': 'run000', 'nfiles': '{0:08d}'.format(0)}
-        video_path = pathformat.format(**path_dict) + '.avi'
+        video_path = ""
+        for file in os.listdir(dir_path):
+            if file.startswith(filename):
+                video_path = join(dir_path, file)
+                break
         print(video_path, flush=True)
         assert isfile(video_path)
         cap = cv2.VideoCapture(video_path)
@@ -57,14 +69,9 @@ class TestFileWriter(unittest.TestCase):
                 break
         cap.release()
         cv2.destroyAllWindows()
-        assert i == nfiles
+        assert i == nframes
         
-        # CLEAN
-        try:
-            dir_path = join(data_folder, data_name)
-            shutil.rmtree(dir_path)
-        except OSError as e:
-            print("Error: %s : %s" % (dir_path, e.strerror))
+        
 
 if __name__ == '__main__':
     unittest.main()
