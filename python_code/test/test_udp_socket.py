@@ -20,14 +20,14 @@ class PingableServer(Process):
     
     def run(self):
         self.start_flag.set()
-        with UDPSocket(self.address) as server:
+        with UDPSocket(self.address) as socket:
             while not self.exit_flag.is_set():
-                ret, msg, emitter_address = server.receive()
+                ret, msg, emitter_address = socket.receive()
                 if ret:
                     if msg == 'ping':
-                        server.send('pong', emitter_address)
+                        socket.send('pong', emitter_address)
         
-class TestUDPServer(unittest.TestCase):
+class TestUDPSocket(unittest.TestCase):
     def setUp(self):
         server_ip = '127.0.0.1'
         server_port = 5005
