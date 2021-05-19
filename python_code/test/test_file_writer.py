@@ -14,6 +14,8 @@ sys.path.append(code_path)
 
 from file_writer import TiffWriter, BinaryWriter, FFMPEGWriter, OpenCVWriter
 
+from tifffile import imread, TiffFile
+
 def get_test_img():
     res_path = join(test_path,'res')
     lenna_path = join(res_path, 'Lenna_(test_image).png')
@@ -64,14 +66,43 @@ class TestFileWriter(unittest.TestCase):
             ret, frame = cap.read()
             if ret:
                 i+=1
-                cv2.imshow('frame',frame)
             else:
                 break
         cap.release()
-        cv2.destroyAllWindows()
         assert i == nframes
         
-        
+    def test_tiff_writer(self):
+        """Write 60 frames of identical Lenna image into a tiff file using the TiffWriter,
+        read the generated images and count the frames, then delete created folders/file"""
+        data_folder = test_path
+        data_name = 'autogen_test_tiff_writer'
+        filename = 'autogen_tiff_file' #without extension
+        dir_path = join(data_folder, data_name)
+        self.generated_folders.append(dir_path)
+        filepath = join(dir_path, filename)
+        nframes = 60
+        # WRITE
+        with TiffWriter(filepath = filepath) as writer:
+            for i in range(nframes):
+                frame_id = i
+                timestamp = time.time()
+                metadata = (frame_id, timestamp) #dummy metadata but respect format
+                writer.save(self.img, metadata)
+        # READ
+        complete_file_path = ""
+        for file in os.listdir(dir_path):
+            if file.startswith(filename):
+                complete_file_path = join(dir_path, file)
+                break
+        print(complete_file_path, flush=True)
+        assert isfile(complete_file_path)
+        i = 0
+        img_stack = imread(complete_file_path)
+        with TiffFile(complete_file_path) as tif:
+            for page in tif.pages:
+                image = page.asarray()
+                i+=1
+        assert i == nframes
 
 if __name__ == '__main__':
     unittest.main()

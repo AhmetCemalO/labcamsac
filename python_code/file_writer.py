@@ -164,16 +164,18 @@ class TiffWriter(FileWriter):
                  filepath,
                  frames_per_file=256,
                  compression=None):
-    
-        super().__init__(filepath,
-                         extension = 'tif',
-                         frames_per_file=frames_per_file)
+        
         self.compression = None
         if not compression is None:
             if compression > 9:
                 display('Can not use compression over 9 for the TiffWriter')
             elif compression > 0:
                 self.compression = compression
+                
+        super().__init__(filepath,
+                         extension = 'tif',
+                         frames_per_file=frames_per_file)
+        
 
     def _get_file_handler(self,filepath,frame = None):
         display('Opening: '+ filepath)
@@ -188,7 +190,6 @@ class BinaryWriter(FileWriter):
     def __init__(self, filepath,
                        frames_per_file = 0,
                        **kwargs):
-        print("C2h", flush=True)
         super().__init__(filepath = filepath + "_{n_chan}_{H}_{W}_{dtype}",
                          frames_per_file=frames_per_file,
                          extension = 'dat')
