@@ -45,8 +45,50 @@ class TestUDPSocket(unittest.TestCase):
             received = False
             while not received:
                 received, msg, address = client.receive()
-        assert(msg == 'pong')
-        assert(address == self.server_address)
+            assert(msg == 'pong')
+            assert(address == self.server_address)
+    
+    def test_successive_pings(self):
+        client_address = ('127.0.0.1', 5004)
+        with UDPSocket(client_address) as client:
+            client.send('ping', self.server_address)
+            received = False
+            while not received:
+                received, msg, address = client.receive()
+            assert(msg == 'pong')
+            assert(address == self.server_address)
+            client.send('ping', self.server_address)
+            received = False
+            while not received:
+                received, msg, address = client.receive()
+            assert(msg == 'pong')
+            assert(address == self.server_address)
+     
+    def test_successive_clients(self):
+        client_address = ('127.0.0.1', 5004)
+        with UDPSocket(client_address) as client:
+            client.send('ping', self.server_address)
+            received = False
+            while not received:
+                received, msg, address = client.receive()
+            assert(msg == 'pong')
+            assert(address == self.server_address)
+        client_address = ('127.0.0.1', 5003)
+        with UDPSocket(client_address) as client:
+            client.send('ping', self.server_address)
+            received = False
+            while not received:
+                received, msg, address = client.receive()
+            assert(msg == 'pong')
+            assert(address == self.server_address)
+        client_address = ('127.0.0.1', 5004)
+        with UDPSocket(client_address) as client:
+            client.send('ping', self.server_address)
+            received = False
+            while not received:
+                received, msg, address = client.receive()
+            assert(msg == 'pong')
+            assert(address == self.server_address)
 
 if __name__ == '__main__':
     unittest.main()
