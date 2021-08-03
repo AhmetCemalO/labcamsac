@@ -7,6 +7,7 @@ import datetime
 from os.path import dirname, join
 from cams.avt_cam import AVTCam
 from cams.pco_cam import PCOCam
+from cams.genicam import GenICam
 from file_writer import BinaryWriter, TiffWriter, FFMPEGWriter, OpenCVWriter
 from utils import display
 
@@ -31,10 +32,14 @@ class CameraHandler(Process):
         self.stop_trigger = Event()
         self.camera_ready = Event()
         self.saving = Event()
+        
+        self.is_acquisition_done = Event()
 
         self.cam_param_InQ = Queue()
         self.cam_param_OutQ = Queue()
         self.cam_param_get_flag = Event()
+        
+        self.handler_closed = Event()
         
         self.img = None
         self.folder_path_array = Array('u',' ' * 1024) #can set folder
@@ -48,7 +53,9 @@ class CameraHandler(Process):
         self.lastframeid = -1
         self.last_timestamp = 0
         
-        self.camera_connected = self._open_cam().is_connected()
+        cam = self._open_cam()
+        self.camera_connected = cam.is_connected()
+        cam.close()
         
         if self.camera_connected:
             self._init_framebuffer()
@@ -101,6 +108,7 @@ class CameraHandler(Process):
                     while not self.stop_trigger.is_set():
                         self._process_queues()
                         frame, metadata = cam.image()
+                        # print(metadata, flush=True)
                         if frame is not None:
                             if self.saving.is_set():
                                 writer.save(frame, metadata)
@@ -109,6 +117,7 @@ class CameraHandler(Process):
                             self.stop_trigger.set()
                     display(f'[{cam.name} {cam.cam_id}] stop trigger set.')
                     self.close_run()
+        self.handler_closed.set()
     
     def _open_writer(self):
         writer_type = self.writer_dict.get('recorder', 'opencv')
@@ -151,7 +160,7 @@ class CameraHandler(Process):
     def _open_cam(self):
         cam_dict_copy = self.cam_dict.copy()
         cam_type = cam_dict_copy.pop('driver', 'avt').lower()
-        cameras = {'avt': AVTCam, 'pco': PCOCam} 
+        cameras = {'avt': AVTCam, 'pco': PCOCam, 'genicam': GenICam} 
         camera = cameras[cam_type]
         return camera(cam_id = cam_dict_copy.get('id', None),
                       params = cam_dict_copy.get('params', None))
@@ -167,6 +176,7 @@ class CameraHandler(Process):
     
     def close_run(self):
         self.start_trigger.clear()
+        self.is_acquisition_done.set()
         if self.saving.is_set():
             self.run_nr += 1
         if not self.close_event.is_set():
@@ -260,6 +270,7 @@ class CameraHandler(Process):
     
     def start_acquisition(self):
         if self.camera_ready.is_set():
+            self.is_acquisition_done.clear()
             self.start_trigger.set()
             return True
         print(f"Could not start acquisition, camera {self.cam_dict['description']} not ready", flush=True)
@@ -271,4 +282,4 @@ class CameraHandler(Process):
     def close(self):
         self.close_event.set()
         self.stop_acquisition()
-        
+        self.handler_closed.wait()
