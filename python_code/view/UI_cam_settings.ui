@@ -144,7 +144,7 @@
      <item>
       <widget class="QSpinBox" name="gain_spinBox">
        <property name="maximum">
-        <number>15</number>
+        <number>50</number>
        </property>
       </widget>
      </item>
