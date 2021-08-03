@@ -40,6 +40,8 @@ class FileWriter(Process):
         self.stop_flag  = Event()
         self.close_flag = Event()
         
+        self.is_run_closed = Event()
+        
         self.inQ = Queue()
 
         self.file_handler = None
@@ -61,6 +63,8 @@ class FileWriter(Process):
     def set_filepath(self, filepath):
         if self.start_flag.is_set():
             self.stop_flag.set()
+            self.is_run_closed.wait()
+            self.is_run_closed.clear()
         filepath = self.get_complete_filepath(filepath)
         self.update_filepath_array(filepath)
         self.file_handler = None
@@ -132,6 +136,7 @@ class FileWriter(Process):
             # display("[Writer] Wrote {0} frames at {1}.".format(self.saved_frame_count,
                                                                # self.filepath))
         self.stop_flag.clear()
+        self.is_run_closed.set()
   
     def _process_queue(self):
         while True:
