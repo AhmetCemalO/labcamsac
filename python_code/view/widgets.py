@@ -29,7 +29,7 @@ class PyCamsWindow(QMainWindow):
         
         self.cam_widgets = []
         for cam in self.preferences.get('cams', []):
-            if cam['driver'] in ['avt', 'pco']:
+            if cam['driver'] in ['avt', 'pco', 'genicam']:
                 self.setup_camera(cam)
         
         server_params = self.preferences.get('server_params', None)
@@ -55,7 +55,7 @@ class PyCamsWindow(QMainWindow):
             cam_widget.cam_handler.set_folder_path(save_path)
         
     def process_server_messages(self):
-        ret, msg,address = self.server.receive()
+        ret, msg, address = self.server.receive()
         if ret:
             action, *value = [i.lower() for i in msg.split('=')]
             
@@ -81,12 +81,20 @@ class PyCamsWindow(QMainWindow):
                     if cam_widget.is_triggered:
                         cam_widget.stop_cam()
                 self.server.send('ok=stop',address)
+                
+            elif action == 'done?':
+                cam_descr = value[0]
+                for cam_widget in self.cam_widgets:
+                    if cam_widget.cam_handler.cam_dict['description'] == cam_descr:
+                        display(f'Received status request from [{address}] \nCam {cam_descr} {action} status: {cam_widget.cam_handler.is_acquisition_done.is_set()}')
+                        self.server.send(f'done?={cam_widget.cam_handler.is_acquisition_done.is_set()}',address)
+                        return
+                self.server.send('done?=camera not found',address)
             
             elif action == 'quit':
                 display(f'Exiting [{address}]')
                 self.server.send('ok=bye',address)
                 self.close()
-            
         
     def setup_camera(self, cam_dict):
         if 'settings_file' in cam_dict.get('params', {}):
