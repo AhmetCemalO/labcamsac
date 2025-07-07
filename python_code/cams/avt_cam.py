@@ -1,5 +1,9 @@
+
 import numpy as np
-from vimba import *
+try:
+    from vimba import *
+except ImportError:
+    pass
 from .generic_cam import GenericCam
 from utils import display
 

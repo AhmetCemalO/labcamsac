@@ -3,7 +3,10 @@ QImaging cameras
 """
 
 from .generic_cam import GenericCam
-from .qimaging_dll import *
+try:
+    from .qimaging_dll import *
+except ImportError:
+    pass
 from ..utils import display
 
 class QImagingCam(GenericCam):

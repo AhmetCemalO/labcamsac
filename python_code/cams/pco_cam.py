@@ -2,7 +2,10 @@
 """
 import time
 import numpy as np
-import pco
+try:
+    import pco
+except ImportError:
+    pco = None
 from cams.generic_cam import GenericCam
 from utils import display
 
