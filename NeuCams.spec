@@ -3,13 +3,13 @@
 block_cipher = None
 
 a = Analysis(
-    ['NeuCams/__main__.py'],
+    ['neucams/__main__.py'],
     pathex=[],
     binaries=[],
     datas=[
-        ('NeuCams/configs/*', 'NeuCams/configs'),
-        ('NeuCams/jsonfiles/*', 'NeuCams/jsonfiles'),
-        ('NeuCams/examples_settings/*', 'NeuCams/examples_settings'),
+        ('neucams/configs/*', 'neucams/configs'),
+        ('neucams/jsonfiles/*', 'neucams/jsonfiles'),
+        ('neucams/examples_settings/*', 'neucams/examples_settings'),
     ],
     hiddenimports=[
         # PyQt5 and related
@@ -42,11 +42,11 @@ a = Analysis(
         'zmq.backend.cython',
         'scipy._lib.messagestream',
         # Dynamic camera modules (add all camera modules you might load dynamically)
-        'NeuCams.cams.avt_cam',
-        'NeuCams.cams.generic_cam',
-        'NeuCams.cams.pco_cam',
-        'NeuCams.cams.qimaging',
-        'NeuCams.cams.opencv_cam',
+        'neucams.cams.avt_cam',
+        'neucams.cams.generic_cam',
+        'neucams.cams.pco_cam',
+        'neucams.cams.qimaging',
+        'neucams.cams.opencv_cam',
         # Add more if you add new camera modules
     ],
     hookspath=[],
@@ -64,7 +64,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='NeuCams',
+    name='neucams',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -80,5 +80,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='NeuCams'
+    name='neucams'
 ) 

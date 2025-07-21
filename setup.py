@@ -10,16 +10,16 @@ with open("readme-pip.md", "r") as fh:
     longdescription = fh.read()
 
 setup(
-    name = 'NeuCams',
+    name = 'neucams',
     version = '1.0',
-    author = 'NeuCams',
+    author = 'neucams',
     author_email = '',
-    description = 'NeuCams: multi-camera control and recording',
+    description = 'neucams: multi-camera control and recording',
     long_description = longdescription,
     long_description_content_type = 'text/markdown',
-    url = 'https://github.com/AhmetCemalO/NeuCams',
+    url = 'https://github.com/AhmetCemalO/neucams',
     license = 'GPL',
-    packages = ['NeuCams'],
+    packages = ['neucams'],
     python_requires = '>=3.7',
     install_requires = [
         'PyYAML==6.0.2',
