@@ -1,0 +1,24 @@
+name: NeuCams
+version: "1.0.0"
+installer_type: exe
+
+channels:
+  - defaults
+
+specs:
+  - menuinst          # constructor will make shortcuts
+  - vc=14.2           # MSVC runtime
+  - vs2015_runtime
+
+extra_files:
+  - payload.zip       # <- your PyInstaller bundle (NeuCams.exe + _internal)
+  - icon.ico
+  - LICENSE.txt
+  - menu/neucams.json
+
+default_prefix: C:\Users\%USERNAME%\NeuCams
+
+license_file: LICENSE.txt
+icon_image: icon.ico
+
+post_install: post_install.bat

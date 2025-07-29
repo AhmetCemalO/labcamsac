@@ -6,6 +6,7 @@ from neucams.utils import get_preferences, display, check_preferences, resolve_c
 from neucams.camera_handler import CameraHandler, CameraFactory
 from pathlib import Path
 import logging
+import platform
 # Set global logging to INFO so neucams info messages show
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 # Suppress info messages from vmbpy
@@ -17,10 +18,21 @@ logging.getLogger('vmbpy').setLevel(logging.WARNING)
 PROJECT_ROOT = str(Path(__file__).parent.parent.parent)
 CONFIG_DIR = os.path.join(PROJECT_ROOT, 'neucams', 'jsonfiles')
 
+def get_user_config_dir():
+    if platform.system() == "Windows":
+        base = os.getenv('LOCALAPPDATA', os.path.expanduser('~'))
+        return os.path.join(base, "NeuCams")
+    else:
+        base = os.getenv('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
+        return os.path.join(base, "NeuCams")
+
+USER_CONFIG_DIR = get_user_config_dir()
+os.makedirs(USER_CONFIG_DIR, exist_ok=True)
+
 # Helpers for saving/loading last config as a relative path
 
 def get_last_config_path():
-    return os.path.join(CONFIG_DIR, '.last_config.txt')
+    return os.path.join(USER_CONFIG_DIR, '.last_config.txt')
 
 def save_last_config(path):
     rel_path = os.path.relpath(path, PROJECT_ROOT)
@@ -121,7 +133,11 @@ class SplashWindow(QWidget):
             self.last_config_label.setText('No last config found.')
 
     def choose_config(self):
-        fname, _ = QFileDialog.getOpenFileName(self, 'Select configuration file', CONFIG_DIR, 'JSON Files (*.json)')
+        # Use user's Documents as default, or fallback to CONFIG_DIR
+        default_dir = os.path.expanduser("~/Documents")
+        if not os.path.isdir(default_dir):
+            default_dir = CONFIG_DIR
+        fname, _ = QFileDialog.getOpenFileName(self, 'Select configuration file', default_dir, 'JSON Files (*.json)')
         if fname:
             self.start_loading()
             self.worker_thread = CameraSetupWorker(fname)

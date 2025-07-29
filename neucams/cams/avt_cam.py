@@ -1,11 +1,41 @@
-# avt_cam.py  –  Vimba X / vmbpy-compatible
+# --- force Vimba DLLs from our bundle ---------------------------------
+import os, sys, ctypes
+from pathlib import Path
 import numpy as np
 from multiprocessing import shared_memory
+
+
+BASE    = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+AVT_DIR = BASE / "vmbpy"
+PLUGS   = AVT_DIR / "plugins"
+
+def _add_dir(p: Path):
+    if p.exists():
+        # Prepend to PATH (legacy loader)
+        os.environ["PATH"] = str(p) + os.pathsep + os.environ.get("PATH", "")
+        # Hint for Py 3.8+ / Win10+
+        if hasattr(os, "add_dll_directory"):
+            os.add_dll_directory(str(p))
+
+# Add both dirs
+_add_dir(AVT_DIR)
+_add_dir(PLUGS)
+
+# Preload core DLL so vmbpy binds to ours, not site-packages
+core_dll = AVT_DIR / "VmbC.dll"
+if core_dll.exists():
+    try:
+        ctypes.WinDLL(str(core_dll))
+    except OSError as e:
+        print("Failed to preload VmbC.dll:", e)
+
+# --- NOW import vmbpy --------------------------------------------------
 from vmbpy import (
     VmbSystem,
     Frame, Camera, PixelFormat,
     VmbFeatureError, VmbTimeout,
 )
+
 from .generic_cam import GenericCam
 from neucams.utils import display
 
@@ -137,7 +167,7 @@ class AVTCam(GenericCam):
         finally:
             if self.vimba:
                 self.vimba.__exit__(exc_type, exc_val, exc_tb)
-        return True
+        return False
 
     # ------------------------------------------------------------------
     # parameter handling
@@ -153,20 +183,45 @@ class AVTCam(GenericCam):
 
         p = self.params
         try:
-            _set(self.cam_handle, "EventNotification", "On")
-            self.cam_handle.set_pixel_format(PixelFormat.Mono8)
+            # 1. Set auto features OFF first
+            try:
+                _set(self.cam_handle, "GainAuto", "Off")
+            except Exception:
+                pass  # Not all cameras support GainAuto
+            try:
+                _set(self.cam_handle, "ExposureAuto", "Off")
+            except Exception:
+                pass  # Not all cameras support ExposureAuto
 
-            _set(self.cam_handle, "SyncOutSelector", "SyncOut1")
-            _set(self.cam_handle, "SyncOutSource", "FrameReadout")
+            # 2. Set selectors before values (for features that need it)
+            try:
+                _set(self.cam_handle, "SyncOutSelector", "SyncOut1")
+                _set(self.cam_handle, "SyncOutSource", "FrameReadout")
+            except Exception:
+                pass  # Not all cameras support SyncOut
 
-            # ⬇⬇ updated names ⬇⬇
+            # 3. Set manual values
             _set(self.cam_handle, "AcquisitionFrameRateAbs", p["frame_rate"])
-            _set(self.cam_handle, "ExposureTimeAbs",       p["exposure"])
-            # ⬆⬆ updated names ⬆⬆
+            _set(self.cam_handle, "ExposureTimeAbs", p["exposure"])
+            _set(self.cam_handle, "Gain", p["gain"])
 
-            _set(self.cam_handle, "Gain",      p["gain"])
-            _set(self.cam_handle, "GainAuto", "Once" if p["gain_auto"] else "Off")
-            _set(self.cam_handle, "ExposureMode", "Timed")
+            # 4. Set trigger mode/selector if needed
+            try:
+                _set(self.cam_handle, "TriggerSelector", "FrameStart")
+                _set(self.cam_handle, "TriggerMode", "Off")  # or as needed
+            except Exception:
+                pass  # Not all cameras support these
+
+            # 5. Set pixel format, event notification, etc.
+            try:
+                self.cam_handle.set_pixel_format(PixelFormat.Mono8)
+            except Exception:
+                pass
+            try:
+                _set(self.cam_handle, "EventSelector", "AcquisitionStart")
+                _set(self.cam_handle, "EventNotification", "On")
+            except Exception:
+                pass
 
         except VmbFeatureError as err:
             display(f"Error applying parameters: {err}", level="warning")

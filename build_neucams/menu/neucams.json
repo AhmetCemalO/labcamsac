@@ -1,0 +1,8 @@
+{
+    "menu_name": "NeuCams",
+    "name": "NeuCams",
+    "target": "NeuCams.exe",
+    "icon": "icon.ico",
+    "system": "windows"
+  }
+  

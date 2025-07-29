@@ -1,7 +1,7 @@
 # These are some examples of commonly ignored file patterns.
 # You should customize this list as applicable to your project.
 # Learn more about .gitignore:
-#     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
+# https://www.atlassian.com/git/tutorials/saving-changes/gitignore
 
 **.egg-info/
 
@@ -52,4 +52,24 @@ Thumbs.db
 *.flv
 *.mov
 *.wmv
+
+# PyInstaller build artifacts
+build_neucams/build/
+build_neucams/dist/
+build_neucams/payload.zip
+
+# Large DLLs and binaries (unless you need them for the build)
+build_neucams/_internal/
+#build_neucams/vmbpy/
+#build_neucams/gentl/
+
+# Installer output
+*.exe
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
 
