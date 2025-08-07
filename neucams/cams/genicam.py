@@ -233,6 +233,32 @@ class GenICam(GenericCam):
             except Exception:
                 pass
 
+        # ----- extra: allow ExposureMode override from JSON -----
+        try:
+            if hasattr(self.features, 'ExposureMode'):
+                self.features.ExposureMode.value = self.params.get('ExposureMode', 'Timed')
+        except Exception:
+            pass
+
+        # ----- extra: map trigger-related keys from JSON -----
+        use_trigger = self.params.get('triggered', False) or \
+                      (self.params.get('TriggerMode', 'Off') != 'Off')
+        if use_trigger:
+            # Some GenICam stacks require TriggerSelector first
+            for k, v in {
+                'TriggerSelector':       self.params.get('TriggerSelector', 'FrameStart'),
+                'TriggerMode':           self.params.get('TriggerMode', 'On'),
+                'TriggerSource':         self.params.get('TriggerSource', 'Line1'),
+                'TriggerActivation':     self.params.get('TriggerActivation', 'RisingEdge'),
+                'lineDetectionLevel':    self.params.get('lineDetectionLevel', 'TTL'),
+                'lineDebouncingPeriod':  self.params.get('lineDebouncingPeriod', 0)
+            }.items():
+                try:
+                    if hasattr(self.features, k):
+                        getattr(self.features, k).value = v
+                except Exception:
+                    pass
+
     # ------------------------------------------------------------------
     def get_features(self):
         if not getattr(self, 'cam_handle', None):
@@ -274,6 +300,13 @@ class GenICam(GenericCam):
             timeout_ms=self.timeout_ms
         )
         self.is_recording = True
+
+    def start(self):
+        """Public method to begin acquisition."""
+        # Replace _internal_start_function with whatever function
+        # actually starts the frame grabbing in your GenICam class.
+        if not self.is_recording:
+            self._internal_start_function()
 
     def stop(self):
         if not getattr(self, 'cam_handle', None):

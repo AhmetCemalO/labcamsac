@@ -1,19 +1,25 @@
 @echo off
 setlocal EnableDelayedExpansion
+
 echo === NeuCams post_install ===
 
-:: 0) Ensure %PREFIX% is set
+
 if not defined PREFIX set "PREFIX=%~dp0.."
 
-:: 1) Unpack payload.zip
+
+set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+"%PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%PREFIX%\create_shortcuts.ps1"
+if errorlevel 1 echo [WARN] create_shortcuts.ps1 returned errorlevel %errorlevel%
+
+
 if exist "%PREFIX%\payload.zip" (
     echo Extracting payload.zip …
-    "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -Command ^
-      "Expand-Archive -LiteralPath '%PREFIX%\payload.zip' -DestinationPath '%PREFIX%' -Force"
+    "%PS%" -NoLogo -NoProfile -Command ^
+        "Expand-Archive -LiteralPath '%PREFIX%\payload.zip' -DestinationPath '%PREFIX%' -Force"
     del "%PREFIX%\payload.zip" >nul 2>&1
 )
 
-:: 2) GenTL env_var logic (unchanged, but NEVER exit with error)
+
 set "GVAR=GENICAM_GENTL64_PATH"
 for /f "tokens=2,*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v %GVAR% 2^>nul') do set "GENTL=%%B"
 if not defined GENTL set "GENTL=%GENICAM_GENTL64_PATH%"
@@ -50,7 +56,7 @@ if exist "%MYGENTL%" (
         )
         echo Adding %MYGENTL% to %GVAR% (machine scope) …
         setx %GVAR% "!NEWGENTL!" /M >nul 2>&1
-        if errorlevel 1 echo [WARN] Could not set machine_wide %GVAR% (non_admin install).
+        if errorlevel 1 echo [WARN] Could not set machine wide %GVAR% (non_admin install).
         set "GENTL=!NEWGENTL!"
     )
 )

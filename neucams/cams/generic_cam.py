@@ -1,6 +1,3 @@
-"""cams.py
-Camera classes for behavioral monitoring and single photon imaging.
-Creates separate processes for acquisition and queues frames"""
 import time
 import ctypes
 

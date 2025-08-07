@@ -167,6 +167,20 @@ def resolve_cam_id_by_serial(driver, serial_number):
         except Exception as e:
             display(f"An error occurred while resolving AVT cam by serial: {e}", level='error')
             return None
+    elif driver == "hamamatsu":
+        try:
+            # new API shipped with the `hamamatsu` / `pyDCAM` wheels
+            # (they just ctypes-load dcamapi.dll, so the DLL-in-PATH trick you did still works)
+            from hamamatsu.dcam import dcam           # or: from pydcam import dcam
+
+            with dcam:                                # opens the DCAM runtime
+                for idx, cam in enumerate(dcam):      # camera objects are iterable
+                    if cam.info.get("serial_number") == serial_number:  # <-- replacement!
+                        return idx                    # DCAM uses the index as camera-ID
+        except Exception as exc:
+            display(f"Hamamatsu lookup failed: {exc}", level="warning")
+
+        return None
     else:
         display(f"Serial number resolution not implemented for driver: {driver}", level='warning')
         return None
