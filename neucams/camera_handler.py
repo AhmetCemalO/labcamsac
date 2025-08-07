@@ -9,9 +9,7 @@ import json
 from neucams.file_writer import BinaryWriter, TiffWriter, FFMPEGWriter, OpenCVWriter
 from neucams.utils import display, resolve_cam_id_by_serial
 from importlib import import_module
-from neucams.cams.avt_cam import AVTCam
-# from cams.pco_cam import PCOCam
-# from cams.genicam import GenICam
+
 
 def clear_queue(my_queue):
     while True:

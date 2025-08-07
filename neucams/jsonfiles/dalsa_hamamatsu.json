@@ -1,26 +1,25 @@
 {
     "cams": [
         {
-            "description": "1photon",
-            "type": "hamamatsu",
-            "name": "Orca",
-			"id": 0,
+            "description": "Hamamatsu Orca",
+            "driver": "hamamatsu",
+            "serial_number": "003024",
             "params": {
 				"binning": 4,
-				"exposure": 40000
+				"exposure": 0.040
             }
         },
-		{"description": "dalsa",
-            "type": "genicam",
-            "name": "Nano-M1930(00:01:0D:C6:87:6D)",
+        {
+            "description": "dalsa2",
+            "driver": "genicam",
+            "serial_number": "H2260415",
             "params": {
                 "exposure": 1500,
-				"frame_rate": 30,
-				"gain": 4,
-				"n_frames": 1,
-				"binning": 1,
-				"trigger_mode": "Off",
-				"trigger_source": "Line1"
+                "frame_rate": 10,
+                "n_frames": 1,
+                "binning": 1,
+                "trigger_mode": "Off",
+                "trigger_source": "Line1"
             },
             "recorder_params": {
                 "recorder": "opencv",
