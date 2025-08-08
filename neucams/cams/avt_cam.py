@@ -183,43 +183,70 @@ class AVTCam(GenericCam):
 
         p = self.params
         try:
-            # 1. Set auto features OFF first
-            try:
-                _set(self.cam_handle, "GainAuto", "Off")
-            except Exception:
-                pass  # Not all cameras support GainAuto
-            try:
-                _set(self.cam_handle, "ExposureAuto", "Off")
-            except Exception:
-                pass  # Not all cameras support ExposureAuto
+            # 0) kill autos first
+            for feat, val in [("GainAuto", "Off"), ("ExposureAuto", "Off")]:
+                try: _set(self.cam_handle, feat, val)
+                except Exception: pass
 
-            # 2. Set selectors before values (for features that need it)
-            try:
-                _set(self.cam_handle, "SyncOutSelector", "SyncOut1")
-                _set(self.cam_handle, "SyncOutSource", "FrameReadout")
-            except Exception:
-                pass  # Not all cameras support SyncOut
-
-            # 3. Set manual values
-            _set(self.cam_handle, "AcquisitionFrameRateAbs", p["frame_rate"])
-            _set(self.cam_handle, "ExposureTimeAbs", p["exposure"])
-            _set(self.cam_handle, "Gain", p["gain"])
-
-            # 4. Set trigger mode/selector if needed
+            # 1) if you use continuous free-run, keep Trigger off
             try:
                 _set(self.cam_handle, "TriggerSelector", "FrameStart")
-                _set(self.cam_handle, "TriggerMode", "Off")  # or as needed
+                _set(self.cam_handle, "TriggerMode", "Off")
             except Exception:
-                pass  # Not all cameras support these
+                pass
 
-            # 5. Set pixel format, event notification, etc.
+            # 2) Pixel format before timing stuff
             try:
                 self.cam_handle.set_pixel_format(PixelFormat.Mono8)
             except Exception:
                 pass
+
+            # 3) Set ExposureTime (Vimba X uses microseconds)
             try:
-                _set(self.cam_handle, "EventSelector", "AcquisitionStart")
-                _set(self.cam_handle, "EventNotification", "On")
+                self.cam_handle.ExposureTime.set(float(p["exposure"]))
+            except Exception:
+                # fallback to legacy name if your model still uses it
+                try: self.cam_handle.ExposureTimeAbs.set(float(p["exposure"]))
+                except Exception: pass
+
+            # 4) Enable and set AcquisitionFrameRate (new names in Vimba X)
+            try:
+                self.cam_handle.AcquisitionFrameRateEnable.set(True)
+                fr_feat = self.cam_handle.AcquisitionFrameRate
+
+                # clamp to camera range & increment
+                lo, hi = fr_feat.get_range()
+                inc = fr_feat.get_increment()
+                target = float(p["frame_rate"])
+                target = min(max(target, lo), hi)
+                if inc and inc > 0:
+                    target = lo + round((target - lo) / inc) * inc
+                fr_feat.set(target)
+            except Exception:
+                # legacy fallback
+                try:
+                    _set(self.cam_handle, "AcquisitionFrameRateAbs", float(p["frame_rate"]))
+                except Exception:
+                    pass
+
+            # 5) (Optional) bandwidth cap if you ever drop frames on GigE/USB
+            # try:
+            #     self.cam_handle.DeviceLinkThroughputLimitMode.set('On')
+            #     self.cam_handle.DeviceLinkThroughputLimit.set( ... )  # bytes/sec
+            # except Exception:
+            #     pass
+
+            # 6) Gain last
+            try:
+                self.cam_handle.Gain.set(p["gain"])
+            except Exception:
+                pass
+
+            # Debug: read back what the camera accepted
+            try:
+                req = float(p["frame_rate"])
+                got = self.cam_handle.AcquisitionFrameRate.get()
+                display(f"Requested FPS={req:.2f}, camera accepted ≈{got:.2f} fps")
             except Exception:
                 pass
 
@@ -228,6 +255,8 @@ class AVTCam(GenericCam):
 
         if resume_recording:
             self._record()
+
+
 
     # ------------------------------------------------------------------
     # acquisition

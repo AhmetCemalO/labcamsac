@@ -93,13 +93,13 @@ class HamamatsuCam(GenericCam):
         LOG.info("Hamamatsu camera opened: %s",
                  self._cam.dcamdev_getstring(DCAM_IDSTR.DCAM_IDSTR_MODEL))
 
-        # format before starting
-        self._query_format()
-
         # parameters
         if self.exposure_time is not None:
             self._try_set("exposure_time", self.exposure_time)
         self.apply_params()
+
+        # format before starting
+        self._query_format()
 
         # allocate & start
         self._cam.dcambuf_alloc(self._bufs)

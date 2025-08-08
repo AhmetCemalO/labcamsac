@@ -8,7 +8,7 @@
             "serial_number": "50-0537068788",
             "params": {
                 "exposure": 1500,
-                "frame_rate": 30,
+                "frame_rate": 10,
                 "gain": 4,
                 "n_frames": 1,
                 "binning": 1,
