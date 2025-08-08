@@ -1,11 +1,9 @@
-from hamamatsu.dcam import dcam
+from pyDCAM import dcamapi_init, dcamapi_uninit, HDCAM
+from pyDCAM.dcamapi_enum import DCAM_IDSTR
 
-with dcam:
-    with dcam[0] as cam:
-        cam["exposure_time"] = 0.04
-        print("exposure_time now:", cam.get("exposure_time"))
-        try:
-            cam["binning"] = 4
-        except Exception:
-            cam["binning"] = "4x4"
-        print("binning now:", cam.get("binning"))
+n = dcamapi_init()
+print("cams:", n)
+for i in range(n):
+    with HDCAM(i) as cam:
+        print(i, cam.dcamdev_getstring(DCAM_IDSTR.DCAM_IDSTR_CAMERAID))
+dcamapi_uninit()

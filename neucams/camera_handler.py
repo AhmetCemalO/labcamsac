@@ -18,22 +18,28 @@ def clear_queue(my_queue):
         except queue.Empty:
             break
 
+
 class CameraFactory:
     cameras = {
         'avt': ('cams.avt_cam', 'AVTCam'),
-        'pco': ('cams.pco_cam', 'PCOCam'),
         'genicam': ('cams.genicam', 'GenICam'),
-        # Add more drivers here as needed
+        'hamamatsu': ('cams.hamamatsu_cam', 'HamamatsuCam'),
     }
 
     @staticmethod
-    def get_camera(driver, cam_id=None, params=None):
+    def get_camera(driver, cam_id=None, params=None, serial_number=None):
         if driver not in CameraFactory.cameras:
             raise ValueError(f"Unknown camera driver: {driver}")
         module_name, class_name = CameraFactory.cameras[driver]
         module = import_module(f'neucams.{module_name}')
         cam_class = getattr(module, class_name)
-        return cam_class(cam_id=cam_id, params=params)
+
+        if driver == 'hamamatsu':
+            return cam_class(cam_id=cam_id, params=params, serial_number=serial_number)
+        else:
+            return cam_class(cam_id=cam_id, params=params)
+
+
 
 class CameraHandler(Process):
     
@@ -79,36 +85,49 @@ class CameraHandler(Process):
         if self.camera_connected:
             self._init_framebuffer()
         
+
     def _init_framebuffer(self):
         with self._open_cam() as cam:
             dtype  = cam.format.get('dtype', None)
             height = cam.format.get('height', None)
             width  = cam.format.get('width', None)
             n_chan = cam.format.get('n_chan', 1)
-            
-            if dtype == np.uint8:
+
+            dtype = np.dtype(dtype) if dtype is not None else None
+
+            if dtype == np.dtype(np.uint8):
                 cdtype = ctypes.c_ubyte
-            elif dtype == np.uint16:
+            elif dtype == np.dtype(np.uint16):
                 cdtype = ctypes.c_ushort
             else:
                 display(f"WARNING: dtype {dtype} not available, defaulting to np.uint16")
                 cdtype = ctypes.c_ushort
-            
-            if (dtype is None) or (height is None) or (width is None):
-                display(f"ERROR: format (height, width, dtype[,n_chan]) needs to be set to init the framebuffer")
-                return
+                dtype = np.dtype(np.uint16)
 
-            self.frame = Array(cdtype,np.zeros([height, width, n_chan],
-                                               dtype = dtype).flatten())
-            self.format = {'dtype':dtype, 'height':height,'width':width,'n_chan':n_chan,'cdtype':cdtype}
-            
+            if (dtype is None) or (height is None) or (width is None):
+                display("ERROR: format (height, width, dtype[,n_chan]) must be set to init the framebuffer")
+                return False
+
+            self.frame = Array(cdtype, np.zeros([height, width, n_chan], dtype=dtype).ravel())
+            self.format = {'dtype': dtype, 'height': height, 'width': width, 'n_chan': n_chan, 'cdtype': cdtype}
             self._init_buffer()
+            return True
+
+
             
     def _init_buffer(self):
         self.img = np.frombuffer(self.frame.get_obj(), dtype = self.format['cdtype'])\
                         .reshape([self.format['height'], self.format['width'], self.format['n_chan']])
                         
     def run(self):
+        
+        if not hasattr(self, "frame"):
+            ok = self._init_framebuffer()
+            if not ok:            # Let _init_framebuffer() return True/False
+                display("Camera not ready—handler exiting.", level="error")
+                self.handler_closed.set()
+                return   
+              
         self._init_buffer()
         with self._open_cam() as cam:
             self.cam = cam
@@ -130,7 +149,7 @@ class CameraHandler(Process):
                         # Handle shared memory tuple from AVT
                         if isinstance(frame, tuple) and len(frame) == 3 and isinstance(frame[0], str):
                             shm_name, shape, dtype = frame
-                            frame, shm = AVTCam.frame_from_shm(shm_name, shape, dtype)
+                            frame, shm = self.frame_from_shm(shm_name, shape, dtype)
                             frame = np.array(frame, copy=True)
                             shm.close()
                             shm.unlink()
@@ -147,15 +166,20 @@ class CameraHandler(Process):
     
     def _open_writer(self):
         writer_type = self.writer_dict.get('recorder', 'opencv')
-        writers = {'opencv': OpenCVWriter, 'binary': BinaryWriter, 'tiff': TiffWriter, 'ffmpeg': FFMPEGWriter} 
-        writer = writers[writer_type]
-        std_keys = ['frames_per_file'] #might be more later again
-        dict = {key: self.writer_dict[key] for key in self.writer_dict if key in std_keys}
+        writers = {'opencv': OpenCVWriter, 'binary': BinaryWriter, 'tiff': TiffWriter, 'ffmpeg': FFMPEGWriter}
+        writer_cls = writers[writer_type]
+        std_keys = ['frames_per_file']
+        cfg = {key: self.writer_dict[key] for key in self.writer_dict if key in std_keys}
         folder = join(self.writer_dict['data_folder'], self.cam_dict['description'], self.writer_dict['experiment_folder'])
         self.set_folder_path(folder)
-        dict['filepath'] = self.get_new_filepath()
-        dict['frame_rate'] = self.cam.params.get('frame_rate', None)
-        return writer(**dict)
+        cfg['filepath'] = self.get_new_filepath()
+
+        import inspect
+        if 'frame_rate' in inspect.signature(writer_cls).parameters:
+            cfg['frame_rate'] = self.cam.params.get('frame_rate', None)
+
+        return writer_cls(**cfg)
+
     
     def get_filepath(self):
         return str(self.filepath_array[:]).strip(' ')
@@ -185,18 +209,26 @@ class CameraHandler(Process):
         
     def _open_cam(self):
         cam_dict_copy = self.cam_dict.copy()
-        cam_type = cam_dict_copy.pop('driver', 'avt').lower()
+        cam_type = cam_dict_copy.pop('driver', None)
+        if cam_type is None:
+            raise ValueError("Camera 'driver' must be specified (avt|genicam|hamamatsu)")
+        cam_type = cam_type.lower()
+
         serial_number = cam_dict_copy.get('serial_number', None)
-        # Prefer serial_number, fallback to id
-        if serial_number is not None:
-            cam_id = resolve_cam_id_by_serial(cam_type, serial_number)
+
+        if cam_type == 'hamamatsu':
+            cam_id = None  # resolve by serial in the driver
         else:
-            cam_id = cam_dict_copy.get('id', None)
+            cam_id = (resolve_cam_id_by_serial(cam_type, serial_number)
+                    if serial_number is not None else cam_dict_copy.get('id', None))
+
         return CameraFactory.get_camera(
             cam_type,
             cam_id=cam_id,
-            params=cam_dict_copy.get('params', None)
+            params=cam_dict_copy.get('params', None),
+            serial_number=serial_number
         )
+
     
     def get_image(self):
         return self.img

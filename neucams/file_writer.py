@@ -11,10 +11,10 @@ from tifffile import imread, TiffFile, TiffWriter as twriter
 from skvideo.io import FFmpegWriter
 import cv2
 from neucams.utils import display
-from neucams.cams.avt_cam import AVTCam
 from multiprocessing import shared_memory
 
 VERSION = 'B0.6'
+
 
 def debug_pickle(obj, prefix=''):
     import pickle, collections.abc
@@ -30,6 +30,13 @@ def debug_pickle(obj, prefix=''):
             for k, v in obj.items():
                 debug_pickle(k, prefix + '  {key} ')
                 debug_pickle(obj[k], prefix + f'  {k}: ')
+
+
+def shm_frame(shm_name, shape, dtype):
+    shm = shared_memory.SharedMemory(name=shm_name)
+    arr = np.ndarray(shape, dtype=np.dtype(dtype), buffer=shm.buf)
+    return arr, shm
+
 
 class FileWriter(Process):
     """Abstract class to write to file(s)
@@ -98,7 +105,7 @@ class FileWriter(Process):
             i += 1
             complete_filepath = f"{filepath}_{i}.{self.extension}"
         return complete_filepath
-                                                               
+                                                                
     def update_filepath_array(self, filepath):
         for i in range(len(self.filepath_array)):
             self.filepath_array[i] = ' '
@@ -176,7 +183,7 @@ class FileWriter(Process):
         # Handle shared memory tuple from AVT
         if isinstance(frame, tuple) and len(frame) == 3 and isinstance(frame[0], str):
             shm_name, shape, dtype = frame
-            frame, shm = AVTCam.frame_from_shm(shm_name, shape, dtype)
+            frame, shm = shm_frame(shm_name, shape, dtype)
             try:
                 if (self.file_handler is None or
                     (self.frames_per_file > 0 and np.mod(self.saved_frame_count,
@@ -263,7 +270,7 @@ class FFMPEGWriter(FileWriter):
                        frame_rate = None,
                        compression=17,
                        **kwargs):
-                       
+                        
         super().__init__(filepath,
                          frames_per_file = frames_per_file,
                          extension = 'avi')
@@ -286,11 +293,11 @@ class FFMPEGWriter(FileWriter):
                     display('Using compression 17 for the intel Media SDK encoder')
                     self.compression = 17
                 self.doutputs = {'-format':'h264',
-                                 '-pix_fmt':'yuv420p',#'gray',
-                                 '-vcodec':'h264_qsv',#'libx264',
+                                 '-pix_fmt':'yuv420p',
+                                 '-vcodec':'h264_qsv',
                                  '-global_quality':str(25), # specific to the qsv
                                  '-look_ahead':str(1),
-                                 #preset='veryfast',#'ultrafast',
+                                 # 'preset':'veryfast',  # or 'ultrafast'
                                  '-threads':str(1),
                                  '-crf':str(self.compression)}
             elif hwaccel == 'nvidia':

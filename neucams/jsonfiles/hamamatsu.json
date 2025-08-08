@@ -5,7 +5,7 @@
             "driver": "hamamatsu",
             "serial_number": "003024",
             "params": {
-				"binning": 4
+				"binning": 1
             }
         }		
     ],

@@ -133,8 +133,8 @@ class SplashWindow(QWidget):
             self.last_config_label.setText('No last config found.')
 
     def choose_config(self):
-        # Use user's Documents as default, or fallback to CONFIG_DIR
-        default_dir = os.path.expanduser("~/Documents")
+        # Use user's Desktop as default, or fallback to CONFIG_DIR
+        default_dir = os.path.expanduser("~/Desktop")
         if not os.path.isdir(default_dir):
             default_dir = CONFIG_DIR
         fname, _ = QFileDialog.getOpenFileName(self, 'Select configuration file', default_dir, 'JSON Files (*.json)')

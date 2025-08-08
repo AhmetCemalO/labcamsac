@@ -23,7 +23,15 @@ from neucams.camera_handler import CameraHandler
 # Re-use the existing CamWidget implementation (and its helpers) from the legacy GUI.
 from neucams.view.components import DisplaySettingsWidget, ImageProcessingWidget
 from neucams.view.base_widgets import BaseCameraWidget, nparray_to_qimg
-from neucams.cams.avt_cam import AVTCam
+
+# -----------------------------------------------------------------------------
+# Shared-memory helper (avoid importing AVT driver unless actually needed)
+# -----------------------------------------------------------------------------
+def frame_from_shm(shm_name, shape, dtype):
+    from multiprocessing import shared_memory
+    shm = shared_memory.SharedMemory(name=shm_name)
+    arr = np.ndarray(shape, dtype=np.dtype(dtype), buffer=shm.buf)
+    return arr, shm
 
 # -----------------------------------------------------------------------------
 # Paths
@@ -88,7 +96,7 @@ class PyCamsWindow(QMainWindow):
                 self._add_widget(cam.get('description'), widget)
         else:
             for cam in self.preferences.get('cams', []):
-                if cam.get('driver') in ['avt', 'pco', 'genicam']:
+                if cam.get('driver') in ['avt', 'pco', 'genicam', 'hamamatsu']:
                     self._setup_camera(cam)
 
         # Arrange the camera windows in a grid
@@ -119,19 +127,22 @@ class PyCamsWindow(QMainWindow):
     # Legacy helpers copied / simplified from the original widgets.py
     # ------------------------------------------------------------------
 
+    # widgets.py
     def _setup_camera(self, cam_dict):
         if 'settings_file' in cam_dict.get('params', {}):
-            cam_dict['params']['settings_file'] = join(dirname(getcwd()),
-                                                       'configs',
-                                                       cam_dict['params']['settings_file'])
+            cam_dict['params']['settings_file'] = join(dirname(getcwd()), 'configs',
+                                                    cam_dict['params']['settings_file'])
         writer_dict = {**self.preferences.get('recorder_params', {}),
-                       **cam_dict.get('recorder_params', {})}
+                    **cam_dict.get('recorder_params', {})}
         cam_handler = CameraHandler(cam_dict, writer_dict)
+        cam_handler.start()  # <-- start the process
         if cam_handler.camera_connected:
-            cam_handler.start()
             widget = CamWidget(cam_handler)
             self.cam_widgets.append(widget)
-            self._add_widget(cam_dict['description'], widget)
+            self._add_widget(cam_dict.get('description', 'Camera'), widget)  # pass widget
+        else:
+            cam_handler.close()
+
 
     def _add_widget(self, name, widget):
         active_subwindows = [e.objectName() for e in self.mdiArea.subWindowList()]
@@ -238,15 +249,20 @@ class PyCamsWindow(QMainWindow):
         time.sleep(0.5)
         display("PyCams out, bye!")
         QApplication.quit()
-        sys.exit() 
+        sys.exit()
 
 class CamWidget(BaseCameraWidget):
     def __init__(self, cam_handler=None):
         super().__init__(cam_handler)
         uic.loadUi(join(dirpath, 'UI_cam.ui'), self)
 
-        # --- FPS computation ---
-        self._fps_deque = deque(maxlen=5) # Store last 5 FPS values
+        # --- Initialize state ---
+        self.original_img = None
+        self.processed_img = None
+        self.frame_nr = 0
+        self._prev_time = time.time()
+        self._prev_frame_nr = 0
+        self._fps_deque = deque(maxlen=5)
 
         # --- Connections ---
         self.start_stop_pushButton.clicked.connect(self._start_stop_toggled)
@@ -273,7 +289,7 @@ class CamWidget(BaseCameraWidget):
             img = self.cam_handler.get_image()
             if isinstance(img, tuple) and len(img) == 3 and isinstance(img[0], str):
                 shm_name, shape, dtype = img
-                img, shm = AVTCam.frame_from_shm(shm_name, shape, dtype)
+                img, shm = frame_from_shm(shm_name, shape, dtype)
                 img = np.array(img, copy=True)
                 shm.close()
                 shm.unlink()
@@ -305,7 +321,10 @@ class CamWidget(BaseCameraWidget):
         self.frame_nr_label.setText(f"frame: {current_frame}")
 
     def _update_img(self):
-        if self.original_img is not None:
+        if not self.cam_handler or not self.cam_handler.start_trigger.is_set():
+            return
+            
+        if self.original_img is not None and self.original_img.size > 0:
             if not self.is_img_processed:
                 self.processed_img = self.display_settings.process_img(self.original_img)
                 self.is_img_processed = True
